@@ -17,12 +17,16 @@ impl Style {
             sx: width as f32 / 1280.0,
             sy: height as f32 / 720.0,
             scale,
-            label: (20.0 * scale).round().max(14.0) as u32,
-            title: (32.0 * scale).round().max(22.0) as u32,
-            footer: (18.0 * scale).round().max(14.0) as u32,
+            label: grid_size(18.0 * scale),
+            title: grid_size(28.0 * scale),
+            footer: grid_size(18.0 * scale),
             padding: (24.0 * scale).round().max(12.0) as i32,
         }
     }
+}
+
+fn grid_size(target: f32) -> u32 {
+    ((target / 11.0).round() as u32).max(2) * 11
 }
 
 pub(crate) struct Caption {
@@ -36,6 +40,41 @@ fn overlaps(a: [i32; 4], b: [i32; 4]) -> bool {
         && a[0] + a[2] + 4 > b[0]
         && a[1] < b[1] + b[3] + 4
         && a[1] + a[3] + 4 > b[1]
+}
+
+fn crosses_rect(a: (f32, f32), b: (f32, f32), bounds: [i32; 4], margin: f32) -> bool {
+    let mut near = 0.0f32;
+    let mut far = 1.0f32;
+    for (start, end, low, high) in [
+        (
+            a.0,
+            b.0,
+            bounds[0] as f32 - margin,
+            (bounds[0] + bounds[2]) as f32 + margin,
+        ),
+        (
+            a.1,
+            b.1,
+            bounds[1] as f32 - margin,
+            (bounds[1] + bounds[3]) as f32 + margin,
+        ),
+    ] {
+        let delta = end - start;
+        if delta.abs() < 0.001 {
+            if start < low || start > high {
+                return false;
+            }
+        } else {
+            let first = (low - start) / delta;
+            let last = (high - start) / delta;
+            near = near.max(first.min(last));
+            far = far.min(first.max(last));
+            if near > far {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// Reserve stable water positions for all planned islands, even before they appear.
@@ -54,27 +93,22 @@ pub(crate) fn plan(
                 .total_cmp(&layout.islands[a].radius),
         )
     });
-    let step = (style.label as f32 * 1.25).ceil() as i32 + 8;
-    let mut offsets: Vec<_> = [0, step]
-        .into_iter()
-        .flat_map(|row| {
-            [0, -step, step]
-                .into_iter()
-                .map(move |column| (column, row))
-        })
-        .collect();
-    offsets.sort_by_key(|&(dx, dy)| (dx * dx + dy * dy, dx.abs()));
+    let max_depth = if layout.islands.len() > 10 { 1 } else { 2 };
+    let limit = if width < 640 { 2 } else { 6 };
     let mut captions: Vec<Caption> = Vec::new();
     for index in order {
         let island = &layout.islands[index];
-        let name = if island.directory == "." {
-            "/"
-        } else {
-            island.directory.rsplit('/').next().unwrap()
-        };
-        let budget = (island.radius * 1.8 * style.sx)
-            .max(90.0 * style.scale)
+        if island.directory == "." || island.depth > max_depth || captions.len() >= limit {
+            continue;
+        }
+        let name = island.directory.rsplit('/').next().unwrap();
+        let budget = (island.radius * 2.5 * style.sx)
+            .max(240.0 * style.scale)
             .min(width as f32 - 2.0 * style.padding as f32) as i32;
+        // Complete names only. Dense maps use a small set of captions.
+        if typography.width(name, style.label) > budget {
+            continue;
+        }
         let text = typography.fit(name, style.label, budget);
         let w = typography.width(&text, style.label) + 8;
         let h = (style.label as f32 * 1.25).ceil() as i32 + 4;
@@ -82,8 +116,18 @@ pub(crate) fn plan(
             (island.x * style.sx) as i32 - w / 2,
             ((island.y + island.radius * 0.45 + 16.0) * style.sy) as i32 - 2,
         );
-        let position = offsets.iter().find_map(|&(dx, dy)| {
-            let bounds = [preferred.0 + dx, preferred.1 + dy, w, h];
+        let above = ((island.y - island.radius * 0.45 - 40.0) * style.sy) as i32 - h;
+        let side = (w / 2 + 12).min((34.0 * style.scale).max(22.0) as i32);
+        let positions = [
+            (preferred.0, preferred.1),
+            (preferred.0, above),
+            (preferred.0 - side, preferred.1),
+            (preferred.0 + side, preferred.1),
+            (preferred.0 - side, above),
+            (preferred.0 + side, above),
+        ];
+        let position = positions.into_iter().find_map(|(x, y)| {
+            let bounds = [x, y, w, h];
             if bounds[0] < style.padding
                 || bounds[0] + w > width as i32 - style.padding
                 || bounds[1] < style.padding + (style.title as f32 * 1.3) as i32
@@ -93,7 +137,29 @@ pub(crate) fn plan(
             {
                 return None;
             }
-            Some(bounds)
+            let touches_another_island = layout.islands.iter().enumerate().any(|(i, other)| {
+                if i == index {
+                    return false;
+                }
+                let x = other.x * style.sx;
+                let y = (other.y - 14.0) * style.sy;
+                let rx = (other.radius + 16.0) * style.sx;
+                let ry = (other.radius * 0.45 + 30.0) * style.sy;
+                let closest_x = x.clamp(bounds[0] as f32, (bounds[0] + w) as f32);
+                let closest_y = y.clamp(bounds[1] as f32, (bounds[1] + h) as f32);
+                ((closest_x - x) / rx).powi(2) + ((closest_y - y) / ry).powi(2) < 1.0
+            });
+            let touches_bridge = layout.bridges.iter().any(|bridge| {
+                bridge.points.windows(2).any(|p| {
+                    crosses_rect(
+                        (p[0].0 * style.sx, p[0].1 * style.sy),
+                        (p[1].0 * style.sx, p[1].1 * style.sy),
+                        bounds,
+                        8.0 * style.scale,
+                    )
+                })
+            });
+            (!touches_another_island && !touches_bridge).then_some(bounds)
         });
         if let Some(bounds) = position {
             captions.push(Caption {
@@ -131,11 +197,21 @@ mod tests {
             average_files_per_directory: 1.0,
         };
         let captions = plan(&layout, &Typography::new().unwrap(), 960, 540);
-        assert!(captions.len() >= 8, "only {} labels fit", captions.len());
+        assert!(!captions.is_empty());
+        assert!(captions.len() <= 6);
+        assert!(captions.iter().all(|c| !c.text.contains('…')));
         for (index, caption) in captions.iter().enumerate() {
             for other in &captions[index + 1..] {
                 assert!(!overlaps(caption.bounds, other.bounds));
             }
         }
+    }
+    #[test]
+    fn bridge_clearance_uses_the_segment_not_its_bounding_box() {
+        let label = [40, 40, 20, 20];
+        assert!(crosses_rect((0.0, 50.0), (100.0, 50.0), label, 4.0));
+        assert!(crosses_rect((50.0, 0.0), (50.0, 100.0), label, 4.0));
+        assert!(!crosses_rect((0.0, 35.0), (100.0, 35.0), label, 4.0));
+        assert!(!crosses_rect((0.0, 0.0), (100.0, 30.0), label, 4.0));
     }
 }

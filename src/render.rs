@@ -15,8 +15,8 @@ use image::{
 use std::collections::BTreeMap;
 
 const WATER: [u8; 4] = [208, 229, 219, 255];
-const INK: [u8; 4] = [37, 61, 49, 255];
-const QUIET: [u8; 4] = [52, 78, 62, 255];
+const INK: [u8; 4] = [56, 80, 64, 255];
+const QUIET: [u8; 4] = [80, 103, 87, 255];
 
 struct Canvas {
     image: RgbaImage,
@@ -577,28 +577,19 @@ impl Renderer {
             .entry((width, height))
             .or_insert_with(|| captions::plan(&self.layout, &self.typography, width, height));
         let mut image = image;
-        // Nearby captions use separate rows. A one-pixel water halo clears plant details.
+        // Sparse full names stay in clear water, without outlines or label badges.
         for caption in captions.iter() {
             let life = lives[caption.island];
             if life < 0.01 {
                 continue;
             }
             let origin = (caption.bounds[0] + 4, caption.bounds[1] + 2);
-            for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                self.typography.draw(
-                    &mut image,
-                    &caption.text,
-                    (origin.0 + dx, origin.1 + dy),
-                    label_size,
-                    [WATER[0], WATER[1], WATER[2], (255.0 * life) as u8],
-                );
-            }
             self.typography.draw(
                 &mut image,
                 &caption.text,
                 origin,
                 label_size,
-                [37, 61, 49, (255.0 * life) as u8],
+                [INK[0], INK[1], INK[2], (255.0 * life) as u8],
             );
         }
         let title = self
@@ -612,25 +603,25 @@ impl Renderer {
             title_size,
             INK,
         );
-        let mut footer = format!(
-            "{}  ·  {} files",
-            &current.commit.date[..10],
-            current.files.len()
+        let date = if history.shallow {
+            format!("{} *", &current.commit.date[..10])
+        } else {
+            current.commit.date[..10].to_owned()
+        };
+        let tally = format!("{} files", current.files.len());
+        let tally_width = self.typography.width(&tally, footer_size);
+        let date = self.typography.fit(
+            &date,
+            footer_size,
+            width as i32 - padding * 2 - tally_width - 16,
         );
-        if history.shallow {
-            footer.push_str("  ·  partial history");
-        }
-        let footer = self
-            .typography
-            .fit(&footer, footer_size, width as i32 - padding * 2);
-        let footer_width = self.typography.width(&footer, footer_size);
+        let baseline = height as i32 - padding - footer_size as i32;
+        self.typography
+            .draw(&mut image, &date, (padding, baseline), footer_size, QUIET);
         self.typography.draw(
             &mut image,
-            &footer,
-            (
-                width as i32 - padding - footer_width,
-                height as i32 - padding - footer_size as i32,
-            ),
+            &tally,
+            (width as i32 - padding - tally_width, baseline),
             footer_size,
             QUIET,
         );

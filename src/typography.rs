@@ -11,7 +11,7 @@ pub(crate) struct Typography {
 impl Typography {
     pub fn new() -> Result<Self> {
         let font = Font::from_bytes(
-            include_bytes!("../assets/fonts/AtkinsonHyperlegible-Regular.ttf") as &[u8],
+            include_bytes!("../assets/fonts/DepartureMono-Regular.otf") as &[u8],
             FontSettings::default(),
         )
         .map_err(|error| anyhow!("Cannot load bundled font: {error}"))?;
@@ -99,8 +99,12 @@ impl Typography {
                     {
                         continue;
                     }
-                    let alpha =
-                        u32::from(pixels[y * metrics.width + x]) * u32::from(color[3]) / 255;
+                    // The bundled font uses a pixel grid. Keep its edges hard at native size.
+                    let alpha = if pixels[y * metrics.width + x] >= 128 {
+                        u32::from(color[3])
+                    } else {
+                        0
+                    };
                     if alpha == 0 {
                         continue;
                     }
@@ -137,14 +141,14 @@ mod tests {
     }
 
     #[test]
-    fn small_captions_keep_full_height_and_antialiased_edges() {
+    fn pixel_captions_keep_their_height_and_only_use_solid_ink() {
         let mut typography = Typography::new().unwrap();
         let mut image = RgbaImage::from_pixel(320, 40, Rgba([208, 229, 219, 255]));
         typography.draw(
             &mut image,
             "2026-10-29   143 files",
             (0, 0),
-            18,
+            22,
             [37, 61, 49, 255],
         );
         let ink: Vec<_> = image
@@ -156,6 +160,10 @@ mod tests {
                 - ink.iter().map(|(_, y, _)| *y).min().unwrap()
                 >= 12
         );
-        assert!(image.pixels().any(|p| p[0] > 37 && p[0] < 208));
+        assert!(
+            image
+                .pixels()
+                .all(|p| p.0 == [208, 229, 219, 255] || p.0 == [37, 61, 49, 255])
+        );
     }
 }

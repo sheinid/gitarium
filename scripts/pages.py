@@ -127,6 +127,7 @@ def renderer_version():
     digest = hashlib.sha256()
     sources = sorted((ROOT / 'src').rglob('*.rs')) + sorted((ROOT / 'assets').rglob('*.png'))
     sources += sorted((ROOT / 'assets/fonts').glob('*.ttf'))
+    sources += sorted((ROOT / 'assets/fonts').glob('*.otf'))
     for path in sources + [ROOT / 'Cargo.lock', Path(__file__)]:
         digest.update(path.read_bytes())
     return digest.hexdigest()[:16]

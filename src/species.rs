@@ -285,8 +285,8 @@ pub fn classify(path: &str) -> Species {
             "ini" | "conf" | "env" | "xml" => 8,
             "html" | "htm" | "vue" | "svelte" | "astro" => 11,
             "ex" | "exs" => 12,
-            "png" | "jpg" | "jpeg" | "svg" | "webp" | "gif" | "ico" | "ttf" | "woff" | "woff2"
-            | "mp3" | "wav" | "mp4" => 13,
+            "png" | "jpg" | "jpeg" | "svg" | "webp" | "gif" | "ico" | "ttf" | "otf" | "woff"
+            | "woff2" | "mp3" | "wav" | "mp4" => 13,
             "sql" | "prisma" => 14,
             "go" => 16,
             "c" | "h" | "cpp" | "hpp" | "cc" => 17,
