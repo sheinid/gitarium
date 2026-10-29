@@ -6,4 +6,5 @@ pub mod history;
 pub mod layout;
 pub mod render;
 pub mod species;
+mod typography;
 pub mod video;

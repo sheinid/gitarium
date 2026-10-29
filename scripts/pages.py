@@ -125,7 +125,8 @@ def restore_published(cache, base):
 
 def renderer_version():
     digest = hashlib.sha256()
-    sources = sorted((ROOT / 'src').rglob('*.rs')) + sorted((ROOT / 'assets').glob('*.png'))
+    sources = sorted((ROOT / 'src').rglob('*.rs')) + sorted((ROOT / 'assets').rglob('*.png'))
+    sources += sorted((ROOT / 'assets/fonts').glob('*.ttf'))
     for path in sources + [ROOT / 'Cargo.lock', Path(__file__)]:
         digest.update(path.read_bytes())
     return digest.hexdigest()[:16]
@@ -194,7 +195,7 @@ def write_site(cache, base, entries, host):
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Gitarium</title>
 <style>
-body{max-width:760px;margin:64px auto;padding:0 24px;background:#fcfcf9;color:#263b33;font:16px/1.6 system-ui,sans-serif}h1{font-size:32px;margin-bottom:8px}h2{font-size:20px;margin-top:40px}a{color:#306b5b}input,button{font:inherit;padding:8px 12px;border:1px solid #aabcb3;border-radius:4px;background:white;color:inherit}input{width:230px}button{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf3ee;padding:16px;font-size:13px}img{width:100%;image-rendering:pixelated;margin-top:20px}small{color:#52695c}
+body{max-width:760px;margin:64px auto;padding:0 24px;background:#fcfcf9;color:#263b33;font:16px/1.6 system-ui,sans-serif}h1{font-size:32px;margin-bottom:8px}h2{font-size:20px;margin-top:40px}a{color:#306b5b}input,button{font:inherit;padding:8px 12px;border:1px solid #aabcb3;border-radius:4px;background:white;color:inherit}input{width:230px}button{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf3ee;padding:16px;font-size:13px}img{width:100%;margin-top:20px}small{color:#52695c}
 </style>
 <h1>Gitarium</h1>
 <p>A Git repository, growing into a pond. Files become plants, directories become islands.</p>

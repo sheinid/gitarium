@@ -4,9 +4,9 @@ use crate::{
     history::History,
     layout::{Layout, path_position},
     species::{classify, hash},
+    typography::Typography,
 };
 use anyhow::Result;
-use font8x8::{BASIC_FONTS, UnicodeFonts};
 use image::{
     Rgba, RgbaImage,
     imageops::{self, FilterType},
@@ -14,8 +14,8 @@ use image::{
 use std::collections::BTreeMap;
 
 const WATER: [u8; 4] = [208, 229, 219, 255];
-const INK: [u8; 4] = [76, 98, 79, 255];
-const QUIET: [u8; 4] = [100, 124, 108, 255];
+const INK: [u8; 4] = [37, 61, 49, 255];
+const QUIET: [u8; 4] = [52, 78, 62, 255];
 
 struct Canvas {
     image: RgbaImage,
@@ -84,27 +84,6 @@ impl Canvas {
             }
         }
     }
-    fn text(&mut self, text: &str, x: i32, y: i32, scale: i32, color: [u8; 4]) {
-        let mut cursor = x;
-        for ch in text.chars() {
-            if let Some(glyph) = BASIC_FONTS.get(ch) {
-                for (row, bits) in glyph.iter().enumerate() {
-                    for col in 0..8 {
-                        if bits & (1 << col) != 0 {
-                            self.rect(
-                                cursor + col * scale,
-                                y + row as i32 * scale,
-                                scale,
-                                scale,
-                                color,
-                            );
-                        }
-                    }
-                }
-            }
-            cursor += 8 * scale;
-        }
-    }
     fn sprite(&mut self, sprite: &RgbaImage, x: i32, y: i32, opacity: f32) {
         for (sx, sy, pixel) in sprite.enumerate_pixels() {
             if pixel[3] == 0 {
@@ -116,24 +95,6 @@ impl Canvas {
         }
     }
 }
-fn clipped(text: &str, max: usize) -> String {
-    let ascii: String = text
-        .chars()
-        .map(|c| {
-            if c.is_ascii_graphic() || c == ' ' {
-                c
-            } else {
-                '?'
-            }
-        })
-        .collect();
-    if ascii.len() <= max {
-        ascii
-    } else {
-        format!("{}..", &ascii[..max.saturating_sub(2)])
-    }
-}
-
 fn bank(x: f32, y: f32, rx: f32, ry: f32, seed: u64) -> Vec<(f32, f32)> {
     let phase = (seed % 1000) as f32 / 159.0;
     (0..36)
@@ -233,6 +194,7 @@ pub struct Renderer {
     background: RgbaImage,
     ducks: (f32, f32),
     animation: Animation,
+    typography: Typography,
 }
 
 impl Renderer {
@@ -277,6 +239,7 @@ impl Renderer {
             background: c.image,
             ducks,
             animation: Animation::default(),
+            typography: Typography::new()?,
         })
     }
 
@@ -520,6 +483,19 @@ impl Renderer {
                 visibility,
             );
         }
+        // Resize the artwork first. Captions retain their own full-resolution glyphs.
+        let mut image = if width == 1280 && height == 720 {
+            c.image
+        } else {
+            imageops::resize(&c.image, width, height, FilterType::Nearest)
+        };
+        let sx = width as f32 / 1280.0;
+        let sy = height as f32 / 720.0;
+        let text_scale = (width as f32 / 960.0).min(height as f32 / 540.0);
+        let label_size = (20.0 * text_scale).round().max(14.0) as u32;
+        let title_size = (32.0 * text_scale).round().max(22.0) as u32;
+        let footer_size = (18.0 * text_scale).round().max(14.0) as u32;
+        let padding = (24.0 * text_scale).round().max(12.0) as i32;
         // Labels are a final pass, so nearby trees never paint over a directory name.
         for &i in &ordered {
             let island = &self.layout.islands[i];
@@ -532,33 +508,68 @@ impl Renderer {
             } else {
                 island.directory.rsplit('/').next().unwrap()
             };
-            let label = clipped(name, if island.depth > 2 { 14 } else { 20 });
-            c.text(
+            let budget = (island.radius * 1.8 * sx)
+                .max(90.0 * text_scale)
+                .min(width as f32 - 2.0 * padding as f32) as i32;
+            let label = self.typography.fit(name, label_size, budget);
+            let label_width = self.typography.width(&label, label_size);
+            let x = (island.x * sx) as i32 - label_width / 2;
+            let y = ((island.y + island.radius * 0.45 + 12.0) * sy) as i32;
+            self.typography.draw(
+                &mut image,
                 &label,
-                island.x as i32 - label.len() as i32 * 4,
-                (island.y + island.radius * 0.45 + 15.0) as i32,
-                1,
-                [98, 123, 98, (220.0 * life) as u8],
+                (
+                    x.clamp(padding, (width as i32 - padding - label_width).max(padding)),
+                    y,
+                ),
+                label_size,
+                [37, 61, 49, (255.0 * life) as u8],
             );
         }
-        let title = clipped(&history.name, 64);
-        c.text(&title, 640 - title.len() as i32 * 8, 32, 2, INK);
-        let footer = format!(
-            "{}   {} files",
+        let title = self
+            .typography
+            .fit(&history.name, title_size, width as i32 - padding * 2);
+        let title_width = self.typography.width(&title, title_size);
+        self.typography.draw(
+            &mut image,
+            &title,
+            ((width as i32 - title_width) / 2, padding - 4),
+            title_size,
+            INK,
+        );
+        let mut footer = format!(
+            "{}  ·  {} files",
             &current.commit.date[..10],
             current.files.len()
         );
-        c.text(&footer, 1248 - footer.len() as i32 * 8, 679, 1, QUIET);
         if history.shallow {
-            c.text("partial history", 32, 696, 1, QUIET);
+            footer.push_str("  ·  partial history");
         }
+        let footer = self
+            .typography
+            .fit(&footer, footer_size, width as i32 - padding * 2);
+        let footer_width = self.typography.width(&footer, footer_size);
+        self.typography.draw(
+            &mut image,
+            &footer,
+            (
+                width as i32 - padding - footer_width,
+                height as i32 - padding - footer_size as i32,
+            ),
+            footer_size,
+            QUIET,
+        );
         if current.files.is_empty() {
-            c.text("no files yet", 596, 354, 1, QUIET);
+            let text = "no files yet";
+            let text_width = self.typography.width(text, label_size);
+            self.typography.draw(
+                &mut image,
+                text,
+                ((width as i32 - text_width) / 2, height as i32 / 2),
+                label_size,
+                QUIET,
+            );
         }
-        if width == 1280 && height == 720 {
-            c.image
-        } else {
-            imageops::resize(&c.image, width, height, FilterType::Nearest)
-        }
+        image
     }
 }

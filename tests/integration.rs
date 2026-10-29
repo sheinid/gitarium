@@ -201,6 +201,25 @@ fn render_is_deterministic_and_obeys_plant_budget() {
 }
 
 #[test]
+fn repository_title_stays_legible_at_embed_and_mobile_resolutions() {
+    let history = cli::demo();
+    let mut renderer = Renderer::new(Layout::new(&history, 6, 24, 450)).unwrap();
+    for (width, height) in [(960, 540), (640, 360), (320, 180)] {
+        let frame = renderer.frame(&history, 47.0, 0.0, width, height);
+        let title_rows: Vec<_> = frame
+            .enumerate_pixels()
+            .filter(|(_, y, pixel)| *y < (height / 8).max(40) && pixel[0] < 60)
+            .map(|(_, y, _)| y)
+            .collect();
+        let ink_height = title_rows.iter().max().unwrap() - title_rows.iter().min().unwrap() + 1;
+        assert!(
+            ink_height >= 14,
+            "{width}px output reduced the title to {ink_height}px"
+        );
+    }
+}
+
+#[test]
 fn cli_json_schema_dry_run_and_validation() {
     let binary = env!("CARGO_BIN_EXE_gitarium");
     let dir = tempfile::tempdir().unwrap();
