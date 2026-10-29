@@ -1,6 +1,7 @@
 use crate::{
     animation::{Animation, Plant, Scene},
     assets::Assets,
+    captions::{self, Caption, Style},
     history::History,
     layout::{Layout, path_position},
     species::{classify, hash},
@@ -195,6 +196,7 @@ pub struct Renderer {
     ducks: (f32, f32),
     animation: Animation,
     typography: Typography,
+    captions: BTreeMap<(u32, u32), Vec<Caption>>,
 }
 
 impl Renderer {
@@ -240,6 +242,7 @@ impl Renderer {
             ducks,
             animation: Animation::default(),
             typography: Typography::new()?,
+            captions: BTreeMap::new(),
         })
     }
 
@@ -484,44 +487,41 @@ impl Renderer {
             );
         }
         // Resize the artwork first. Captions retain their own full-resolution glyphs.
-        let mut image = if width == 1280 && height == 720 {
+        let image = if width == 1280 && height == 720 {
             c.image
         } else {
             imageops::resize(&c.image, width, height, FilterType::Nearest)
         };
-        let sx = width as f32 / 1280.0;
-        let sy = height as f32 / 720.0;
-        let text_scale = (width as f32 / 960.0).min(height as f32 / 540.0);
-        let label_size = (20.0 * text_scale).round().max(14.0) as u32;
-        let title_size = (32.0 * text_scale).round().max(22.0) as u32;
-        let footer_size = (18.0 * text_scale).round().max(14.0) as u32;
-        let padding = (24.0 * text_scale).round().max(12.0) as i32;
-        // Labels are a final pass, so nearby trees never paint over a directory name.
-        for &i in &ordered {
-            let island = &self.layout.islands[i];
-            let life = lives[i];
+        let style = Style::new(width, height);
+        let label_size = style.label;
+        let title_size = style.title;
+        let footer_size = style.footer;
+        let padding = style.padding;
+        let captions = self
+            .captions
+            .entry((width, height))
+            .or_insert_with(|| captions::plan(&self.layout, &self.typography, width, height));
+        let mut image = image;
+        // Nearby captions use separate rows. A one-pixel water halo clears plant details.
+        for caption in captions.iter() {
+            let life = lives[caption.island];
             if life < 0.01 {
                 continue;
             }
-            let name = if island.directory == "." {
-                "/"
-            } else {
-                island.directory.rsplit('/').next().unwrap()
-            };
-            let budget = (island.radius * 1.8 * sx)
-                .max(90.0 * text_scale)
-                .min(width as f32 - 2.0 * padding as f32) as i32;
-            let label = self.typography.fit(name, label_size, budget);
-            let label_width = self.typography.width(&label, label_size);
-            let x = (island.x * sx) as i32 - label_width / 2;
-            let y = ((island.y + island.radius * 0.45 + 12.0) * sy) as i32;
+            let origin = (caption.bounds[0] + 4, caption.bounds[1] + 2);
+            for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                self.typography.draw(
+                    &mut image,
+                    &caption.text,
+                    (origin.0 + dx, origin.1 + dy),
+                    label_size,
+                    [WATER[0], WATER[1], WATER[2], (255.0 * life) as u8],
+                );
+            }
             self.typography.draw(
                 &mut image,
-                &label,
-                (
-                    x.clamp(padding, (width as i32 - padding - label_width).max(padding)),
-                    y,
-                ),
+                &caption.text,
+                origin,
                 label_size,
                 [37, 61, 49, (255.0 * life) as u8],
             );

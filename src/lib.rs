@@ -1,5 +1,6 @@
 pub mod animation;
 pub mod assets;
+mod captions;
 pub mod cli;
 pub mod embed;
 pub mod history;
