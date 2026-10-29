@@ -4,27 +4,28 @@ Grow a Git repository into a pixel-art pond. Directories become islands, files b
 
 ## Embed in your README
 
-Paste this into any README and replace `OWNER/REPOSITORY`:
+1. [Request a GIF](https://github.com/sheinid/gitarium/issues/new?template=render.yml) for a public GitHub repository. You only need to do this once.
+2. When the request closes with `render-ready`, paste this into your README and replace `OWNER/REPOSITORY` with the lowercase repository path:
 
 ```md
-![Repository growing with Gitarium](https://gitarium-f0f902-185-16-61-74.sslip.io/embed/OWNER/REPOSITORY.gif)
+![Repository growing with Gitarium](https://sheinid.github.io/gitarium/embed/OWNER/REPOSITORY.gif)
 ```
 
-The hosted service generates an animated GIF from the repository's history. No installation, workflow, or token is needed in the repository you embed. Public GitHub repositories only.
+[Open the GIF gallery](https://sheinid.github.io/gitarium/). GitHub Actions renders the timelapses; GitHub Pages hosts them. Changed repositories refresh every six hours. No installation, workflow, or token is needed in your repository.
 
-The first view starts a render. It may briefly show a preparing image; refresh after the render finishes. Cached GIFs refresh after six hours when viewed, and the previous image stays available during refresh.
+The first render takes a few minutes after Actions starts. Loading an image does not start rendering. A GitHub account is needed to submit the one-time request. GitHub's README image cache may delay visible updates.
 
 Gitarium's own history:
 
-![Gitarium growing from its own commits](https://gitarium-f0f902-185-16-61-74.sslip.io/embed/sheinid/gitarium.gif)
+![Gitarium growing from its own commits](https://sheinid.github.io/gitarium/embed/sheinid/gitarium.gif)
 
-You can also print the Markdown with the CLI:
+You can also print the Markdown and first-render request link with the CLI:
 
 ```sh
 gitarium embed OWNER/REPOSITORY --format human
 ```
 
-Use `--base-url https://your-host.example` with a self-hosted service. [Hosting, HTTP endpoints, and public-service limits](docs/hosting.md).
+The public queue supports up to 24 repositories, with repository and render size limits. [Limits, refresh behavior, and your own Pages instance](docs/pages.md).
 
 ## Run locally
 
@@ -128,18 +129,19 @@ Renames appear as a removal and a new planting. Submodule contents are skipped. 
 
 Tracked `node_modules`, `target`, `vendor`, `dist`, `build`, `.next`, `__pycache__`, and `.venv` directories are hidden unless `--include-generated` is set. `--max-files` optionally limits filtered files per observed snapshot.
 
-## Develop and self-host
+## Develop
 
 ```sh
-cargo test --release --features server --locked
+cargo test --release --locked
 cargo fmt --check
-cargo clippy --all-targets --features server -- -D warnings
-GITARIUM_TEST_FFMPEG=/path/to/ffmpeg cargo test --release --features server --locked
+cargo clippy --all-targets --locked -- -D warnings
+GITARIUM_TEST_FFMPEG=/path/to/ffmpeg cargo test --release --locked
+python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-The `server` feature is optional. It builds `gitarium-server` alongside the CLI. The included Dockerfile and Compose file provide a non-root service with persistent GIF caching. See [hosting](docs/hosting.md) for setup and limits.
+Tests cover Git trees and merges, threshold boundaries, parent links, file ownership, bridge routing, stable rendering, real-time transitions, retained deletions, GIF and MP4 encoding, Pages caching, and input validation.
 
-Tests cover Git trees and merges, threshold boundaries, parent links, file ownership, bridge routing, stable rendering, real-time transitions, retained deletions, GIF and MP4 encoding, cache responses, and input validation.
+The GIF request queue and publishing workflow live in `.github/` and `scripts/pages.py`. [Run your own Pages instance](docs/pages.md#run-your-own-pages-instance) to host another gallery.
 
 ## License and artwork
 
