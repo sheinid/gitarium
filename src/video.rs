@@ -16,6 +16,7 @@ pub struct VideoOptions {
     pub duration: f32,
     pub hold: f32,
     pub calendar: bool,
+    pub transition: f32,
 }
 impl VideoOptions {
     pub fn validate(&self) -> Result<()> {
@@ -36,6 +37,9 @@ impl VideoOptions {
         }
         if !self.hold.is_finite() || self.hold < 0.0 || self.hold >= self.duration {
             bail!("--hold must be nonnegative and shorter than --duration");
+        }
+        if !self.transition.is_finite() || !(0.1..=5.0).contains(&self.transition) {
+            bail!("--transition must be 0.1..5 seconds");
         }
         Ok(())
     }
@@ -191,7 +195,10 @@ pub fn export(
     let mut child = command.spawn().context("Could not start FFmpeg")?;
     let mut stdin = child.stdin.take().context("FFmpeg stdin is unavailable")?;
     let frames = (options.duration * options.fps as f32).round() as usize;
-    let active = ((options.duration - options.hold) * options.fps as f32)
+    let transition = options
+        .transition
+        .min((options.duration - options.hold) * 0.5);
+    let active = ((options.duration - options.hold - transition) * options.fps as f32)
         .round()
         .max(2.0) as usize;
     let result = (|| -> Result<()> {
@@ -202,12 +209,13 @@ pub fn export(
             } else {
                 progress * (history.snapshots.len() - 1) as f32
             };
-            let image = renderer.frame(
+            let image = renderer.animated_frame(
                 history,
                 position,
                 frame as f32 / options.fps as f32,
                 options.width,
                 options.height,
+                transition,
             );
             stdin
                 .write_all(image.as_raw())

@@ -100,6 +100,9 @@ pub struct Movie {
     /// Seconds to linger on the final state, included in duration.
     #[arg(long, default_value_t=2.0, value_parser=finite)]
     pub hold: f32,
+    /// Real-time entrance and exit duration, independent of commit playback speed.
+    #[arg(long, default_value_t=1.2, value_parser=transition)]
+    pub transition: f32,
     /// Pace by elapsed commit time, including quiet periods.
     #[arg(long)]
     pub calendar: bool,
@@ -166,6 +169,14 @@ fn duration(input: &str) -> std::result::Result<f32, String> {
         Err("Expected 1..600 seconds".into())
     }
 }
+fn transition(input: &str) -> std::result::Result<f32, String> {
+    let v = finite(input)?;
+    if (0.1..=5.0).contains(&v) {
+        Ok(v)
+    } else {
+        Err("Expected 0.1..5 seconds".into())
+    }
+}
 fn progress(input: &str) -> std::result::Result<f32, String> {
     let v = finite(input)?;
     if (0.0..=1.0).contains(&v) {
@@ -226,6 +237,7 @@ impl Movie {
             duration: self.duration,
             hold: self.hold,
             calendar: self.calendar,
+            transition: self.transition,
         };
         options.validate()?;
         Ok(options)

@@ -1,4 +1,5 @@
 use crate::{
+    animation::{Animation, Plant, Scene},
     assets::Assets,
     history::History,
     layout::{Layout, path_position},
@@ -166,6 +167,7 @@ struct BridgeSprite {
     x: i32,
     y: i32,
     image: RgbaImage,
+    progress: Vec<f32>,
 }
 
 fn bridge_sprite(source: &RgbaImage, points: &[(f32, f32)], radius: f32) -> BridgeSprite {
@@ -182,6 +184,8 @@ fn bridge_sprite(source: &RgbaImage, points: &[(f32, f32)], radius: f32) -> Brid
         .collect();
     let total = lengths.iter().sum::<f32>().max(0.001);
     let mut image = RgbaImage::new((max_x - min_x + 1) as u32, (max_y - min_y + 1) as u32);
+    let mut progress = vec![0.0; image.width() as usize * image.height() as usize];
+    let image_width = image.width();
     for (x, y, pixel) in image.enumerate_pixels_mut() {
         let px = (x as i32 + min_x) as f32;
         let py = (y as i32 + min_y) as f32;
@@ -206,6 +210,7 @@ fn bridge_sprite(source: &RgbaImage, points: &[(f32, f32)], radius: f32) -> Brid
             traveled += length;
         }
         if nearest < width * 0.5 && (0.0..1.0).contains(&uv.0) && (0.0..1.0).contains(&uv.1) {
+            progress[(y * image_width + x) as usize] = uv.0;
             *pixel = *source.get_pixel(
                 (uv.0 * source.width() as f32) as u32,
                 (uv.1 * source.height() as f32) as u32,
@@ -216,6 +221,7 @@ fn bridge_sprite(source: &RgbaImage, points: &[(f32, f32)], radius: f32) -> Brid
         x: min_x,
         y: min_y,
         image,
+        progress,
     }
 }
 
@@ -226,6 +232,7 @@ pub struct Renderer {
     bridges: Vec<BridgeSprite>,
     background: RgbaImage,
     ducks: (f32, f32),
+    animation: Animation,
 }
 
 impl Renderer {
@@ -269,6 +276,7 @@ impl Renderer {
             bridges,
             background: c.image,
             ducks,
+            animation: Animation::default(),
         })
     }
 
@@ -288,7 +296,7 @@ impl Renderer {
         );
     }
 
-    /// Child islands emerge at the threshold. Ownership changes interpolate between islands.
+    /// Still images show the requested committed state immediately.
     pub fn frame(
         &mut self,
         history: &History,
@@ -297,25 +305,80 @@ impl Renderer {
         width: u32,
         height: u32,
     ) -> RgbaImage {
-        let last = history.snapshots.len() - 1;
-        let next = (position.ceil() as usize).min(last);
-        let prev = (position.floor() as usize).min(last);
-        let t = if next == prev { 1.0 } else { position.fract() };
-        let ease = t * t * (3.0 - 2.0 * t);
-        let before = &history.snapshots[prev];
-        let current = &history.snapshots[next];
-        let old_states = &self.layout.snapshots[prev];
-        let new_states = &self.layout.snapshots[next];
-        let lives: Vec<_> = old_states
+        let index = (position.round() as usize).min(history.snapshots.len() - 1);
+        let snapshot = &history.snapshots[index];
+        let states = &self.layout.snapshots[index];
+        let islands: Vec<f32> = states
             .iter()
-            .zip(new_states)
-            .map(|(old, new)| match (old.active, new.active) {
-                (true, true) => 1.0,
-                (false, true) => ease,
-                (true, false) => 1.0 - ease,
-                _ => 0.0,
+            .map(|s| if s.active { 1.0 } else { 0.0 })
+            .collect();
+        let bridges = self
+            .layout
+            .bridges
+            .iter()
+            .map(|b| islands[b.parent].min(islands[b.child]))
+            .collect();
+        let plants = states
+            .iter()
+            .enumerate()
+            .flat_map(|(i, state)| {
+                let island = &self.layout.islands[i];
+                state.plants.iter().map(move |path| {
+                    let file = &snapshot.files[path];
+                    let (dx, dy) = path_position(path, island.radius);
+                    Plant {
+                        path: path.clone(),
+                        x: island.x + dx,
+                        y: island.y + dy - 3.0,
+                        radius: island.radius,
+                        opacity: 1.0,
+                        bytes: file.bytes,
+                        born: file.born,
+                    }
+                })
             })
             .collect();
+        self.paint(
+            history,
+            position,
+            time,
+            width,
+            height,
+            Scene {
+                islands,
+                bridges,
+                plants,
+            },
+        )
+    }
+
+    pub fn animated_frame(
+        &mut self,
+        history: &History,
+        position: f32,
+        time: f32,
+        width: u32,
+        height: u32,
+        seconds: f32,
+    ) -> RgbaImage {
+        let scene = self
+            .animation
+            .update(history, &self.layout, position, time, seconds);
+        self.paint(history, position, time, width, height, scene)
+    }
+
+    fn paint(
+        &mut self,
+        history: &History,
+        position: f32,
+        time: f32,
+        width: u32,
+        height: u32,
+        scene: Scene,
+    ) -> RgbaImage {
+        let current =
+            &history.snapshots[(position.floor() as usize).min(history.snapshots.len() - 1)];
+        let lives = &scene.islands;
         let mut c = Canvas {
             image: self.background.clone(),
         };
@@ -332,10 +395,22 @@ impl Renderer {
         );
         // Paint connections underneath the banks, so both ends land on their actual parent and child.
         for (index, bridge) in self.layout.bridges.iter().enumerate() {
+            let reveal = scene.bridges[index];
             let opacity = lives[bridge.parent].min(lives[bridge.child]);
-            if opacity > 0.01 {
+            if reveal > 0.001 && opacity > 0.001 {
                 let sprite = &self.bridges[index];
-                c.sprite(&sprite.image, sprite.x, sprite.y, opacity);
+                for (sx, sy, pixel) in sprite.image.enumerate_pixels() {
+                    if pixel[3] == 0 {
+                        continue;
+                    }
+                    let along = sprite.progress[(sy * sprite.image.width() + sx) as usize];
+                    let front = ((reveal - along) * 24.0).clamp(0.0, 1.0);
+                    let mut color = pixel.0;
+                    color[3] = (f32::from(color[3]) * opacity * front) as u8;
+                    if color[3] > 0 {
+                        c.pixel(sprite.x + sx as i32, sprite.y + sy as i32, color);
+                    }
+                }
             }
         }
         let mut ordered: Vec<_> = (0..self.layout.islands.len()).collect();
@@ -350,23 +425,26 @@ impl Renderer {
             if life < 0.01 {
                 continue;
             }
-            let r = island.radius * (0.84 + life * 0.16);
+            let r = island.radius * (0.08 + life * 0.92).sqrt();
             let x = island.x;
-            let y = island.y;
+            let y = island.y + (1.0 - life) * 7.0;
             let seed = hash(&island.directory);
             c.polygon(
                 &bank(x, y + 3.0, r + 9.0, r * 0.45 + 7.0, seed),
-                [187, 215, 191, 255],
+                [187, 215, 191, (255.0 * life) as u8],
             );
             c.polygon(
                 &bank(x, y + 2.0, r + 4.0, r * 0.45 + 3.0, seed),
-                [217, 221, 183, 255],
+                [217, 221, 183, (255.0 * life) as u8],
             );
-            c.polygon(&bank(x, y, r, r * 0.45, seed), [224, 216, 172, 255]);
+            c.polygon(
+                &bank(x, y, r, r * 0.45, seed),
+                [224, 216, 172, (255.0 * life) as u8],
+            );
             let grass = if seed % 2 == 0 {
-                [157, 177, 113, 255]
+                [157, 177, 113, (255.0 * life) as u8]
             } else {
-                [151, 173, 108, 255]
+                [151, 173, 108, (255.0 * life) as u8]
             };
             c.polygon(
                 &bank(
@@ -394,55 +472,19 @@ impl Renderer {
                 }
             }
         }
-        let mut old_owners = BTreeMap::new();
-        let mut new_owners = BTreeMap::new();
-        for (i, state) in old_states.iter().enumerate() {
-            for path in &state.plants {
-                old_owners.insert(path.as_str(), i);
-            }
-        }
-        for (i, state) in new_states.iter().enumerate() {
-            for path in &state.plants {
-                new_owners.insert(path.as_str(), i);
-            }
-        }
-        let paths: std::collections::BTreeSet<_> = old_owners
-            .keys()
-            .chain(new_owners.keys())
-            .copied()
-            .collect();
-        let mut plants = Vec::new();
-        for path in paths {
-            let old = old_owners.get(path).copied();
-            let new = new_owners.get(path).copied();
-            let visibility = match (old, new) {
-                (Some(_), Some(_)) => 1.0,
-                (None, Some(_)) => ease,
-                (Some(_), None) => 1.0 - ease,
-                _ => 0.0,
-            };
-            if visibility < 0.02 {
-                continue;
-            }
-            let from = &self.layout.islands[old.or(new).unwrap()];
-            let to = &self.layout.islands[new.or(old).unwrap()];
-            let (old_dx, old_dy) = path_position(path, from.radius);
-            let (new_dx, new_dy) = path_position(path, to.radius);
-            let px = (from.x + old_dx) * (1.0 - ease) + (to.x + new_dx) * ease;
-            let py = (from.y + old_dy) * (1.0 - ease) + (to.y + new_dy) * ease - 3.0;
-            let radius = from.radius * (1.0 - ease) + to.radius * ease;
-            plants.push((path, px, py, radius, visibility));
-        }
-        plants.sort_by(|a, b| a.2.total_cmp(&b.2));
-        for (path, px, py, radius, visibility) in plants {
-            let Some(state) = current.files.get(path).or_else(|| before.files.get(path)) else {
-                continue;
-            };
+        let mut plants = scene.plants;
+        plants.sort_by(|a, b| a.y.total_cmp(&b.y));
+        for plant in plants {
+            let path = plant.path.as_str();
+            let px = plant.x;
+            let py = plant.y;
+            let radius = plant.radius;
+            let visibility = plant.opacity;
             let species = classify(path);
             let source = &self.assets.plants[species.id];
-            let age = (position - state.born as f32).max(0.0);
+            let age = (position - plant.born as f32).max(0.0);
             let maturity = 0.64 + 0.36 * (age / 7.0).min(1.0);
-            let size = 0.90 + ((state.bytes + 1) as f32).ln().min(12.0) * 0.018;
+            let size = 0.90 + ((plant.bytes + 1) as f32).ln().min(12.0) * 0.018;
             let scale = (radius / 64.0).clamp(0.55, 1.6);
             let h = (source.height() as f32 * scale * maturity * size * visibility.sqrt())
                 .round()

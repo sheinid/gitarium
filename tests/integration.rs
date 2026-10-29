@@ -257,7 +257,8 @@ fn calendar_handles_backwards_clocks_and_video_constraints() {
             fps: 12,
             duration: 3.0,
             hold: 1.0,
-            calendar: false
+            calendar: false,
+            transition: 1.2,
         }
         .validate()
         .is_err()
@@ -283,6 +284,7 @@ fn encoder_roundtrip_when_available() {
             duration: 2.0,
             hold: 0.5,
             calendar: false,
+            transition: 1.2,
         },
         &path,
         Path::new(&encoder),
