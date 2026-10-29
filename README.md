@@ -127,7 +127,7 @@ Gitarium reads first-parent history. Merge commits include the complete merged t
 
 By default it samples 240 evenly spaced observations, including both endpoints. `--max-commits` accepts up to 2000 observations. Sampling can miss short-lived files or directories. Layout planning uses maximum simultaneous subtree counts, so historical path churn does not inflate island eligibility.
 
-Renames appear as a removal and a new planting. Submodule contents are skipped. Git paths must be UTF-8. Captions use a bundled font drawn at the output resolution. Long names truncate to fit; crowded maps omit labels that would overlap. Unsupported glyphs appear as `?`. Shallow clones show available history and carry a partial-history label. Calendar mode handles backwards commit clocks with a monotone timestamp envelope.
+Renames appear as a removal and a new planting. Submodule contents are skipped. Git paths must be UTF-8. Captions use a compact pixel font drawn at its native grid size. Maps show a few full directory names in clear water; dense maps label only primary islands. Labels never cover bridges or neighboring islands. Unsupported glyphs appear as `?`. Shallow clones show available history and mark the date with an asterisk. Calendar mode handles backwards commit clocks with a monotone timestamp envelope.
 
 Tracked `node_modules`, `target`, `vendor`, `dist`, `build`, `.next`, `__pycache__`, and `.venv` directories are hidden unless `--include-generated` is set. `--max-files` optionally limits filtered files per observed snapshot.
 
@@ -147,4 +147,4 @@ The GIF request queue and publishing workflow live in `.github/` and `scripts/pa
 
 ## License and artwork
 
-MIT. Sprite sheets were generated with ImageGen; the prompts are included in `assets/`. The renderer trims them to small pixel grids and a shared palette. Atkinson Hyperlegible is bundled under the SIL Open Font License in `assets/fonts/OFL.txt`. FFmpeg is an external dependency with its own license.
+MIT. Sprite sheets were generated with ImageGen; the prompts are included in `assets/`. The renderer trims them to small pixel grids and a shared palette. Departure Mono by Helena Zhang is bundled under the SIL Open Font License in `assets/fonts/DepartureMono-OFL.txt`. FFmpeg is an external dependency with its own license.
