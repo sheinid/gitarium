@@ -41,7 +41,7 @@ pub enum Commands {
     Demo(Demo),
     /// List botanical species and their file associations.
     Species,
-    /// Print a paste-only Markdown embed for a public GitHub repository.
+    /// Print a Pages image URL, Markdown, and a first-render request link.
     Embed {
         /// OWNER/REPOSITORY or its GitHub URL.
         repository: String,
@@ -603,6 +603,9 @@ pub fn emit(result: Result<Value>, format: Format) -> i32 {
                 );
             } else if let Some(markdown) = data.get("markdown").and_then(Value::as_str) {
                 println!("{markdown}");
+                if let Some(url) = data.get("request_url").and_then(Value::as_str) {
+                    eprintln!("Request the first render before embedding: {url}");
+                }
             } else if let Some(path) = data.get("output").and_then(Value::as_str) {
                 println!("Grown and saved to {path}");
             } else {

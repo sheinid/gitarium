@@ -5,7 +5,5 @@ pub mod embed;
 pub mod history;
 pub mod layout;
 pub mod render;
-#[cfg(feature = "server")]
-pub mod server;
 pub mod species;
 pub mod video;

@@ -8,20 +8,8 @@ description = "Grow a pixel-art island garden from Git history and export its li
 license = "MIT"
 repository = "https://github.com/sheinid/gitarium"
 
-[features]
-default = []
-server = ["dep:axum", "dep:tokio", "dep:reqwest"]
-
-[[bin]]
-name = "gitarium-server"
-path = "src/bin/gitarium-server.rs"
-required-features = ["server"]
-
 [dependencies]
 anyhow = "1"
-axum = { version = "0.8", optional = true }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal", "process"], optional = true }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "4.5", features = ["derive"] }
 font8x8 = "0.3"

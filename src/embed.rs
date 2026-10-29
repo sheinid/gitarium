@@ -1,8 +1,7 @@
 use anyhow::{Result, bail};
 use serde::Serialize;
-use std::path::{Path, PathBuf};
 
-pub const DEFAULT_BASE_URL: &str = "https://gitarium-f0f902-185-16-61-74.sslip.io";
+pub const DEFAULT_BASE_URL: &str = "https://sheinid.github.io/gitarium";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Repository {
@@ -46,12 +45,6 @@ impl Repository {
     pub fn slug(&self) -> String {
         format!("{}/{}", self.owner, self.name)
     }
-    pub fn clone_url(&self) -> String {
-        format!("https://github.com/{}/{}.git", self.owner, self.name)
-    }
-    pub fn cache_path(&self, root: &Path) -> PathBuf {
-        root.join(&self.owner).join(format!("{}.gif", self.name))
-    }
     pub fn markdown(&self, base: &str) -> Result<serde_json::Value> {
         let base = base.trim_end_matches('/');
         if !(base.starts_with("https://")
@@ -68,9 +61,15 @@ impl Repository {
             bail!("Embed base URL must be an HTTPS URL without a query or fragment");
         }
         let url = format!("{base}/embed/{}/{}.gif", self.owner, self.name);
-        Ok(
-            serde_json::json!({"repository":self.slug(),"url":url,"markdown":format!("![{} growing with Gitarium]({url})",self.slug())}),
-        )
+        let request_url = format!(
+            "https://github.com/sheinid/gitarium/issues/new?template=render.yml&repository={}%2F{}",
+            self.owner, self.name
+        );
+        Ok(serde_json::json!({
+            "repository":self.slug(), "url":url, "request_url":request_url,
+            "registration_required":true,
+            "markdown":format!("![{} growing with Gitarium]({url})",self.slug())
+        }))
     }
 }
 
@@ -104,7 +103,7 @@ mod tests {
         );
     }
     #[test]
-    fn markdown_points_to_the_hosted_gif_without_setup() {
+    fn markdown_includes_the_pages_url_and_first_render_request() {
         let repo = Repository::parse("sheinid/gitarium").unwrap();
         let data = repo.markdown("https://garden.example/").unwrap();
         assert_eq!(
@@ -112,6 +111,13 @@ mod tests {
             "https://garden.example/embed/sheinid/gitarium.gif"
         );
         assert!(data["markdown"].as_str().unwrap().starts_with("!["));
+        assert!(
+            data["request_url"]
+                .as_str()
+                .unwrap()
+                .ends_with("repository=sheinid%2Fgitarium")
+        );
+        assert_eq!(data["registration_required"], true);
         assert!(repo.markdown("https://example.com/)[injection]").is_err());
     }
 }

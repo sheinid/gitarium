@@ -1,0 +1,92 @@
+name: Render and publish GIFs
+
+on:
+  push:
+    branches: [main]
+  issues:
+    types: [opened, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: Public GitHub repository to add, OWNER/REPOSITORY
+        required: false
+        type: string
+  schedule:
+    - cron: '17 */6 * * *'
+
+concurrency:
+  group: gitarium-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pages:
+    if: >-
+      github.event_name != 'issues' ||
+      (contains(github.event.issue.labels.*.name, 'gitarium-render') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'gitarium-render'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Install Rust and FFmpeg
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.85.0
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-1.85-${{ hashFiles('Cargo.lock') }}
+      - name: Check and build
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets --locked -- -D warnings
+          GITARIUM_TEST_FFMPEG=ffmpeg cargo test --release --locked
+          cargo build --release --locked
+          python3 -m unittest discover -s scripts -p 'test_*.py'
+      - uses: actions/configure-pages@v5
+        id: config
+      - name: Restore rendered GIFs
+        uses: actions/cache/restore@v6
+        with:
+          path: work/pages-cache
+          key: gifs-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: gifs-
+      - name: Render repository history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGES_BASE_URL: ${{ steps.config.outputs.base_url }}
+        run: python3 scripts/pages.py render
+      - name: Cache rendered GIFs
+        uses: actions/cache/save@v6
+        with:
+          path: work/pages-cache
+          key: gifs-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: work/pages-cache
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Complete rendered requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/pages.py complete

@@ -1,0 +1,19 @@
+name: Request a repository GIF
+description: Generate a Gitarium timelapse hosted on GitHub Pages.
+title: "Render repository GIF"
+labels: [gitarium-render]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Request a GIF once, then paste its stable Pages URL into your README.
+        Actions renders public repositories and refreshes changed repositories every six hours.
+        A successful request closes with the `render-ready` label. No setup is needed in your repository.
+  - type: input
+    id: repository
+    attributes:
+      label: Repository
+      description: A public GitHub repository, as OWNER/REPOSITORY or its GitHub URL.
+      placeholder: octocat/Hello-World
+    validations:
+      required: true
