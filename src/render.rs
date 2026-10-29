@@ -577,7 +577,7 @@ impl Renderer {
             .entry((width, height))
             .or_insert_with(|| captions::plan(&self.layout, &self.typography, width, height));
         let mut image = image;
-        // Sparse full names stay in clear water, without outlines or label badges.
+        // Smaller captions keep directory names visible on every island.
         for caption in captions.iter() {
             let life = lives[caption.island];
             if life < 0.01 {
