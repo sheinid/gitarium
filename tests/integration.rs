@@ -183,7 +183,15 @@ fn render_is_deterministic_and_obeys_plant_budget() {
         3
     );
     assert_eq!(
-        layout.hidden_plants + 3,
+        layout.hidden_plants
+            + 3
+            + layout
+                .snapshots
+                .last()
+                .unwrap()
+                .iter()
+                .map(|s| s.collapsed_files)
+                .sum::<usize>(),
         history.snapshots.last().unwrap().files.len()
     );
     let mut renderer = Renderer::new(layout).unwrap();
@@ -377,7 +385,7 @@ fn synthetic_history(states: Vec<Vec<String>>) -> history::History {
 }
 
 #[test]
-fn threshold_promotes_and_retires_children_without_double_counting() {
+fn folders_become_islands_without_transplanting_or_double_counting() {
     let initial: Vec<String> = [
         "README.md",
         "src/root.rs",
@@ -397,7 +405,14 @@ fn threshold_promotes_and_retires_children_without_double_counting() {
         "src/root.rs".into(),
         "src/api/a.rs".into(),
     ];
-    let h = synthetic_history(vec![initial, second, third, final_state]);
+    let h = synthetic_history(vec![
+        initial,
+        second,
+        third,
+        final_state,
+        vec!["README.md".into()],
+        vec!["README.md".into(), "src/api/a.rs".into()],
+    ]);
     let layout = Layout::with_threshold(&h, 6, 32, 100, Some(4));
     let src = layout
         .islands
@@ -418,8 +433,27 @@ fn threshold_promotes_and_retires_children_without_double_counting() {
     assert_eq!(layout.snapshots[2][api].file_count, 5);
     assert_eq!(layout.snapshots[2][src].file_count, 1);
     assert_eq!(layout.snapshots[2][0].file_count, 1);
-    assert!(!layout.snapshots[3][api].active);
-    assert!(!layout.snapshots[3][src].active);
+    assert!(layout.snapshots[3][api].active); // Established islands survive shrinking folders.
+    assert!(layout.snapshots[3][src].active);
+    assert!(!layout.snapshots[4][api].active); // Removing the directory retires its island.
+    assert!(!layout.snapshots[4][src].active);
+    assert!(!layout.snapshots[5][src].active); // Recreated small folders start as buildings.
+    assert_eq!(layout.snapshots[0][0].plants, vec!["README.md"]);
+    assert_eq!(layout.snapshots[0][0].buildings[0].directory, "src");
+    assert_eq!(layout.snapshots[0][0].buildings[0].file_count, 4);
+    assert_eq!(layout.snapshots[1][src].plants, vec!["src/root.rs"]);
+    assert_eq!(layout.snapshots[1][src].buildings[0].directory, "src/api");
+    assert_eq!(layout.snapshots[1][src].buildings[0].file_count, 4);
+    let initial_building = &layout.snapshots[0][0].buildings[0];
+    let recreated = &layout.snapshots[5][0].buildings[0];
+    assert_eq!(
+        (
+            initial_building.sprite,
+            initial_building.x,
+            initial_building.y
+        ),
+        (recreated.sprite, recreated.x, recreated.y)
+    );
     for (snapshot, states) in h.snapshots.iter().zip(&layout.snapshots) {
         assert_eq!(
             states.iter().map(|n| n.file_count).sum::<usize>(),
@@ -435,6 +469,18 @@ fn threshold_promotes_and_retires_children_without_double_counting() {
             plants.len()
         );
         assert!(plants.iter().all(|p| snapshot.files.contains_key(*p)));
+        for (island, state) in layout.islands.iter().zip(states) {
+            for path in &state.plants {
+                assert_eq!(
+                    path.rsplit_once('/').map_or(".", |(dir, _)| dir),
+                    island.directory
+                );
+            }
+        }
+        assert_eq!(
+            plants.len() + states.iter().map(|s| s.collapsed_files).sum::<usize>(),
+            snapshot.files.len()
+        );
     }
     assert_eq!(layout.bridges.len(), layout.islands.len() - 1);
     for bridge in &layout.bridges {
@@ -481,13 +527,21 @@ fn island_limit_keeps_a_connected_tree_and_the_file_budget() {
             .sum::<usize>(),
         72
     );
-    assert_eq!(
+    assert!(
         layout.snapshots[0]
             .iter()
             .map(|n| n.plants.len())
-            .sum::<usize>(),
-        7
+            .sum::<usize>()
+            <= 7
     );
+    assert_eq!(
+        layout.snapshots[0]
+            .iter()
+            .map(|n| n.collapsed_files)
+            .sum::<usize>(),
+        72
+    );
+    assert!(layout.snapshots[0].iter().any(|n| !n.buildings.is_empty()));
 }
 
 #[test]

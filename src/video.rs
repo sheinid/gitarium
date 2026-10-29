@@ -207,8 +207,9 @@ pub fn export(
     let frames = (options.duration * options.fps as f32).round() as usize;
     let transition = options
         .transition
-        .min((options.duration - options.hold) * 0.5);
-    let active = ((options.duration - options.hold - transition) * options.fps as f32)
+        .min((options.duration - options.hold) / (crate::animation::SETTLE_FACTOR + 1.0));
+    let active = ((options.duration - options.hold - transition * crate::animation::SETTLE_FACTOR)
+        * options.fps as f32)
         .round()
         .max(2.0) as usize;
     let result = (|| -> Result<()> {

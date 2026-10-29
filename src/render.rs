@@ -1,5 +1,5 @@
 use crate::{
-    animation::{Animation, Plant, Scene},
+    animation::{Animation, Building, Plant, Scene},
     assets::Assets,
     captions::{self, Caption, Style},
     history::History,
@@ -187,6 +187,19 @@ fn bridge_sprite(source: &RgbaImage, points: &[(f32, f32)], radius: f32) -> Brid
     }
 }
 
+enum Object {
+    Plant(Plant),
+    Building(Building),
+}
+impl Object {
+    fn y(&self) -> f32 {
+        match self {
+            Self::Plant(p) => p.y,
+            Self::Building(b) => b.y,
+        }
+    }
+}
+
 pub struct Renderer {
     pub layout: Layout,
     assets: Assets,
@@ -262,6 +275,37 @@ impl Renderer {
         );
     }
 
+    fn building(&mut self, c: &mut Canvas, building: &Building, land_opacity: f32) {
+        let opacity = building.opacity * land_opacity;
+        let source = &self.assets.buildings[building.sprite];
+        let scale = (building.radius / 90.0).clamp(0.75, 1.25);
+        let h = (source.height() as f32 * scale * building.opacity.sqrt())
+            .round()
+            .max(2.0) as u32;
+        let sprite = self
+            .cache
+            .entry((32 + building.sprite, h, false))
+            .or_insert_with(|| {
+                let w = (source.width() as f32 / source.height() as f32 * h as f32)
+                    .round()
+                    .max(1.0) as u32;
+                imageops::resize(source, w, h, FilterType::Nearest)
+            });
+        c.ellipse(
+            building.x,
+            building.y,
+            sprite.width() as f32 * 0.35,
+            2.0,
+            [68, 83, 54, (48.0 * opacity) as u8],
+        );
+        c.sprite(
+            sprite,
+            (building.x - sprite.width() as f32 / 2.0) as i32,
+            (building.y - sprite.height() as f32) as i32,
+            opacity,
+        );
+    }
+
     /// Still images show the requested committed state immediately.
     pub fn frame(
         &mut self,
@@ -294,6 +338,7 @@ impl Renderer {
                     let (dx, dy) = path_position(path, island.radius);
                     Plant {
                         path: path.clone(),
+                        island: i,
                         x: island.x + dx,
                         y: island.y + dy - 3.0,
                         radius: island.radius,
@@ -301,6 +346,23 @@ impl Renderer {
                         bytes: file.bytes,
                         born: file.born,
                     }
+                })
+            })
+            .collect();
+        let buildings = states
+            .iter()
+            .enumerate()
+            .flat_map(|(i, state)| {
+                let radius = self.layout.islands[i].radius;
+                state.buildings.iter().map(move |b| Building {
+                    directory: b.directory.clone(),
+                    island: i,
+                    x: b.x,
+                    y: b.y,
+                    radius,
+                    opacity: 1.0,
+                    sprite: b.sprite,
+                    file_count: b.file_count,
                 })
             })
             .collect();
@@ -314,6 +376,7 @@ impl Renderer {
                 islands,
                 bridges,
                 plants,
+                buildings,
             },
         )
     }
@@ -391,7 +454,7 @@ impl Renderer {
             if life < 0.01 {
                 continue;
             }
-            let r = island.radius * (0.08 + life * 0.92).sqrt();
+            let r = island.radius * (0.80 + life * 0.20);
             let x = island.x;
             let y = island.y + (1.0 - life) * 7.0;
             let seed = hash(&island.directory);
@@ -438,53 +501,65 @@ impl Renderer {
                 }
             }
         }
-        let mut plants = scene.plants;
-        plants.sort_by(|a, b| a.y.total_cmp(&b.y));
-        for plant in plants {
-            let path = plant.path.as_str();
-            let px = plant.x;
-            let py = plant.y;
-            let radius = plant.radius;
-            let visibility = plant.opacity;
-            let species = classify(path);
-            let source = &self.assets.plants[species.id];
-            let age = (position - plant.born as f32).max(0.0);
-            let maturity = 0.64 + 0.36 * (age / 7.0).min(1.0);
-            let size = 0.90 + ((plant.bytes + 1) as f32).ln().min(12.0) * 0.018;
-            let scale = (radius / 64.0).clamp(0.55, 1.6);
-            let h = (source.height() as f32 * scale * maturity * size * visibility.sqrt())
-                .round()
-                .max(3.0) as u32;
-            let flip = hash(path) & 1 == 1;
-            let sprite = self.cache.entry((species.id, h, flip)).or_insert_with(|| {
-                let w = (source.width() as f32 / source.height() as f32 * h as f32)
-                    .round()
-                    .max(1.0) as u32;
-                let sprite = imageops::resize(source, w, h, FilterType::Nearest);
-                if flip {
-                    imageops::flip_horizontal(&sprite)
-                } else {
-                    sprite
+        let mut objects: Vec<_> = scene
+            .plants
+            .into_iter()
+            .map(Object::Plant)
+            .chain(scene.buildings.into_iter().map(Object::Building))
+            .collect();
+        objects.sort_by(|a, b| a.y().total_cmp(&b.y()));
+        for object in objects {
+            match object {
+                Object::Building(building) => {
+                    self.building(&mut c, &building, lives[building.island])
                 }
-            });
-            c.ellipse(
-                px,
-                py,
-                source.width() as f32 * scale * 0.22,
-                1.5,
-                [95, 122, 76, (42.0 * visibility) as u8],
-            );
-            let sway = if matches!(species.id, 8 | 14 | 17 | 27) {
-                0.0
-            } else {
-                (time * 1.15 + (hash(path) % 90) as f32).sin() * 0.6
-            };
-            c.sprite(
-                sprite,
-                (px - sprite.width() as f32 / 2.0 + sway) as i32,
-                (py - h as f32) as i32,
-                visibility,
-            );
+                Object::Plant(plant) => {
+                    let path = plant.path.as_str();
+                    let px = plant.x;
+                    let py = plant.y;
+                    let radius = plant.radius;
+                    let visibility = plant.opacity * lives[plant.island];
+                    let species = classify(path);
+                    let source = &self.assets.plants[species.id];
+                    let age = (position - plant.born as f32).max(0.0);
+                    let maturity = 0.64 + 0.36 * (age / 7.0).min(1.0);
+                    let size = 0.90 + ((plant.bytes + 1) as f32).ln().min(12.0) * 0.018;
+                    let scale = (radius / 64.0).clamp(0.55, 1.6);
+                    let h = (source.height() as f32 * scale * maturity * size * visibility.sqrt())
+                        .round()
+                        .max(3.0) as u32;
+                    let flip = hash(path) & 1 == 1;
+                    let sprite = self.cache.entry((species.id, h, flip)).or_insert_with(|| {
+                        let w = (source.width() as f32 / source.height() as f32 * h as f32)
+                            .round()
+                            .max(1.0) as u32;
+                        let sprite = imageops::resize(source, w, h, FilterType::Nearest);
+                        if flip {
+                            imageops::flip_horizontal(&sprite)
+                        } else {
+                            sprite
+                        }
+                    });
+                    c.ellipse(
+                        px,
+                        py,
+                        source.width() as f32 * scale * 0.22,
+                        1.5,
+                        [95, 122, 76, (42.0 * visibility) as u8],
+                    );
+                    let sway = if matches!(species.id, 8 | 14 | 17 | 27) {
+                        0.0
+                    } else {
+                        (time * 1.15 + (hash(path) % 90) as f32).sin() * 0.6
+                    };
+                    c.sprite(
+                        sprite,
+                        (px - sprite.width() as f32 / 2.0 + sway) as i32,
+                        (py - h as f32) as i32,
+                        visibility,
+                    );
+                }
+            }
         }
         // Resize the artwork first. Captions retain their own full-resolution glyphs.
         let image = if width == 1280 && height == 720 {

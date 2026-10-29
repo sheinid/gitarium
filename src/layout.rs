@@ -19,10 +19,21 @@ pub struct Bridge {
     pub points: Vec<(f32, f32)>,
 }
 #[derive(Clone, Debug)]
+pub struct DirectoryBuilding {
+    pub directory: String,
+    pub file_count: usize,
+    pub sprite: usize,
+    pub x: f32,
+    pub y: f32,
+}
+#[derive(Clone, Debug)]
 pub struct IslandState {
     pub active: bool,
     pub file_count: usize,
     pub plants: Vec<String>,
+    pub buildings: Vec<DirectoryBuilding>,
+    pub collapsed_files: usize,
+    pub hidden_buildings: usize,
 }
 #[derive(Clone, Debug)]
 pub struct Layout {
@@ -178,19 +189,49 @@ impl Layout {
             .map(|i| ((i.radius * i.radius * 0.0075).round() as usize).clamp(2, 55))
             .collect();
         let mut snapshots = Vec::with_capacity(history.snapshots.len());
+        let mut established = vec![false; islands.len()];
         for (step, snapshot) in history.snapshots.iter().enumerate() {
             let active: Vec<_> = chosen
                 .iter()
                 .enumerate()
-                .map(|(i, &all)| i == 0 || all_counts[step][all] > threshold)
+                .map(|(i, &all)| {
+                    let count = all_counts[step][all];
+                    if count == 0 {
+                        established[i] = false;
+                    }
+                    if count > threshold {
+                        established[i] = true;
+                    }
+                    i == 0 || established[i]
+                })
                 .collect();
             let mut owned = vec![Vec::new(); islands.len()];
+            let mut counts = vec![0; islands.len()];
+            let mut folders = vec![BTreeMap::<String, usize>::new(); islands.len()];
             for path in snapshot.files.keys() {
                 let mut owner = membership[path.as_str()];
                 while !active[owner] {
                     owner = islands[owner].parent.unwrap();
                 }
-                owned[owner].push(path.clone());
+                counts[owner] += 1;
+                let base = islands[owner].directory.as_str();
+                if directory(path) == base {
+                    // Files only sprout in their own directory. Subtrees stay folded.
+                    owned[owner].push(path.clone());
+                } else {
+                    let relative = if base == "." {
+                        path.as_str()
+                    } else {
+                        path.strip_prefix(&format!("{base}/")).unwrap()
+                    };
+                    let child = relative.split('/').next().unwrap();
+                    let name = if base == "." {
+                        child.to_owned()
+                    } else {
+                        format!("{base}/{child}")
+                    };
+                    *folders[owner].entry(name).or_default() += 1;
+                }
             }
             let available: Vec<_> = owned
                 .iter()
@@ -212,13 +253,35 @@ impl Layout {
             }
             let mut states = Vec::with_capacity(islands.len());
             for (i, mut plants) in owned.into_iter().enumerate() {
-                let file_count = plants.len();
+                let file_count = counts[i];
                 plants.sort_by_key(|p| hash(p));
                 plants.truncate(allocations[i]);
+                let collapsed_files = folders[i].values().sum();
+                let mut buildings: Vec<_> = folders[i]
+                    .iter()
+                    .map(|(directory, &file_count)| {
+                        let (dx, dy) =
+                            path_position(&format!("building:{directory}"), islands[i].radius);
+                        DirectoryBuilding {
+                            directory: directory.clone(),
+                            file_count,
+                            sprite: (hash(directory) % 16) as usize,
+                            x: islands[i].x + dx,
+                            y: islands[i].y + dy - 3.0,
+                        }
+                    })
+                    .collect();
+                buildings.sort_by_key(|b| hash(&b.directory));
+                let capacity = ((islands[i].radius.powi(2) * 0.0008).round() as usize).clamp(1, 8);
+                let hidden_buildings = buildings.len().saturating_sub(capacity);
+                buildings.truncate(capacity);
                 states.push(IslandState {
                     active: active[i],
                     file_count,
                     plants,
+                    buildings,
+                    collapsed_files,
+                    hidden_buildings,
                 });
             }
             snapshots.push(states);
@@ -235,7 +298,15 @@ impl Layout {
             .unwrap()
             .files
             .len()
-            .saturating_sub(drawn);
+            .saturating_sub(
+                drawn
+                    + snapshots
+                        .last()
+                        .unwrap()
+                        .iter()
+                        .map(|s| s.collapsed_files)
+                        .sum::<usize>(),
+            );
         Self {
             islands,
             bridges,
@@ -249,8 +320,12 @@ impl Layout {
     pub fn summary(&self) -> Value {
         json!({"island_threshold":self.threshold,"mean_files_per_nonempty_directory":self.average_files_per_directory,
             "planned_islands":self.islands.len(),"visible_islands":self.snapshots.last().unwrap().iter().filter(|i|i.active).count(),
-            "omitted_plants":self.hidden_plants,"bridges":self.bridges.iter().map(|b|json!({"parent":self.islands[b.parent].directory,"child":self.islands[b.child].directory,"sprite":b.sprite,"points":b.points})).collect::<Vec<_>>(),"islands":self.islands.iter().enumerate().map(|(i,n)|json!({"directory":n.directory,"depth":n.depth,
-                "parent":n.parent.map(|p|self.islands[p].directory.as_str()),"radius":n.radius,"files":self.snapshots.last().unwrap()[i].file_count})).collect::<Vec<_>>()})
+            "omitted_plants":self.hidden_plants,
+            "files_in_directory_buildings":self.snapshots.last().unwrap().iter().map(|s|s.collapsed_files).sum::<usize>(),
+            "visible_directory_buildings":self.snapshots.last().unwrap().iter().map(|s|s.buildings.len()).sum::<usize>(),
+            "omitted_directory_buildings":self.snapshots.last().unwrap().iter().map(|s|s.hidden_buildings).sum::<usize>(),"bridges":self.bridges.iter().map(|b|json!({"parent":self.islands[b.parent].directory,"child":self.islands[b.child].directory,"sprite":b.sprite,"points":b.points})).collect::<Vec<_>>(),"islands":self.islands.iter().enumerate().map(|(i,n)|json!({"directory":n.directory,"depth":n.depth,
+                "parent":n.parent.map(|p|self.islands[p].directory.as_str()),"radius":n.radius,"files":self.snapshots.last().unwrap()[i].file_count,
+                    "directory_buildings":self.snapshots.last().unwrap()[i].buildings.iter().map(|b|json!({"directory":b.directory,"files":b.file_count,"sprite":b.sprite})).collect::<Vec<_>>() })).collect::<Vec<_>>()})
     }
 }
 

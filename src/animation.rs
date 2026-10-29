@@ -1,6 +1,7 @@
 use crate::{
     history::History,
-    layout::{Layout, path_position},
+    layout::{DirectoryBuilding, Layout, path_position},
+    species::hash,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -40,9 +41,13 @@ impl<const N: usize> Tween<N> {
     }
 }
 
+// Island appearance, then local growth. Exporters reserve both phases before the hold.
+pub const SETTLE_FACTOR: f32 = 2.0;
+
 #[derive(Clone, Debug)]
 pub struct Plant {
     pub path: String,
+    pub island: usize,
     pub x: f32,
     pub y: f32,
     pub radius: f32,
@@ -51,9 +56,30 @@ pub struct Plant {
     pub born: usize,
 }
 struct PlantMotion {
-    pose: Tween<4>,
+    life: Tween<1>,
+    island: usize,
+    x: f32,
+    y: f32,
+    radius: f32,
     bytes: u64,
     born: usize,
+}
+#[derive(Clone, Debug)]
+pub struct Building {
+    pub directory: String,
+    pub island: usize,
+    pub x: f32,
+    pub y: f32,
+    pub radius: f32,
+    pub opacity: f32,
+    pub sprite: usize,
+    pub file_count: usize,
+}
+struct BuildingMotion {
+    life: Tween<1>,
+    island: usize,
+    radius: f32,
+    building: DirectoryBuilding,
 }
 
 #[derive(Default)]
@@ -61,12 +87,14 @@ pub struct Animation {
     islands: Vec<Tween<1>>,
     bridges: Vec<Tween<1>>,
     plants: BTreeMap<String, PlantMotion>,
+    buildings: BTreeMap<(usize, String), BuildingMotion>,
     last_time: Option<f32>,
 }
 pub struct Scene {
     pub islands: Vec<f32>,
     pub bridges: Vec<f32>,
     pub plants: Vec<Plant>,
+    pub buildings: Vec<Building>,
 }
 impl Animation {
     pub fn update(
@@ -99,39 +127,66 @@ impl Animation {
             } else {
                 0.0
             };
-            let delay = if target > 0.0 { duration * 0.16 } else { 0.0 };
-            self.bridges[i].target([target], time, duration * 0.78, delay);
+            let delay = if target > 0.0 { duration * 0.45 } else { 0.0 };
+            self.bridges[i].target([target], time, duration * 0.80, delay);
         }
         let mut selected = BTreeSet::new();
+        let mut selected_buildings = BTreeSet::new();
         for (i, state) in states.iter().enumerate() {
             let island = &layout.islands[i];
+            // Newly exposed land settles before anything grows on it.
+            let ready_at = self.islands[i].started + duration * 0.75;
+            let land_delay = (ready_at - time).max(0.0);
             for path in &state.plants {
                 selected.insert(path.as_str());
                 let file = &snapshot.files[path];
                 let (dx, dy) = path_position(path, island.radius);
-                let target = [island.x + dx, island.y + dy - 3.0, island.radius, 1.0];
                 let motion = self
                     .plants
                     .entry(path.clone())
                     .or_insert_with(|| PlantMotion {
-                        pose: Tween::new([target[0], target[1] + 6.0, target[2], 0.0]),
+                        life: Tween::new([0.0]),
+                        island: i,
+                        x: island.x + dx,
+                        y: island.y + dy - 3.0,
+                        radius: island.radius,
                         bytes: file.bytes,
                         born: file.born,
                     });
                 motion.bytes = file.bytes;
                 motion.born = file.born;
-                motion.pose.target(target, time, duration, 0.0);
+                let stagger = (hash(path) % 100) as f32 / 100.0 * duration * 0.20;
+                motion
+                    .life
+                    .target([1.0], time, duration, land_delay + stagger);
+            }
+            for building in &state.buildings {
+                let key = (i, building.directory.clone());
+                selected_buildings.insert(key.clone());
+                let motion = self.buildings.entry(key).or_insert_with(|| BuildingMotion {
+                    life: Tween::new([0.0]),
+                    island: i,
+                    radius: island.radius,
+                    building: building.clone(),
+                });
+                motion.building.file_count = building.file_count;
+                motion.life.target([1.0], time, duration * 0.8, land_delay);
             }
         }
         for (path, motion) in &mut self.plants {
             if !selected.contains(path.as_str()) {
-                let mut target = motion.pose.to;
-                target[3] = 0.0;
-                motion.pose.target(target, time, duration, 0.0);
+                motion.life.target([0.0], time, duration * 0.8, 0.0);
+            }
+        }
+        for (key, motion) in &mut self.buildings {
+            if !selected_buildings.contains(key) {
+                motion.life.target([0.0], time, duration * 0.7, 0.0);
             }
         }
         self.plants
-            .retain(|_, motion| motion.pose.to[3] > 0.0 || motion.pose.value(time)[3] > 0.001);
+            .retain(|_, m| m.life.to[0] > 0.0 || m.life.value(time)[0] > 0.001);
+        self.buildings
+            .retain(|_, m| m.life.to[0] > 0.0 || m.life.value(time)[0] > 0.001);
         Scene {
             islands: self.islands.iter().map(|t| t.value(time)[0]).collect(),
             bridges: self.bridges.iter().map(|t| t.value(time)[0]).collect(),
@@ -139,15 +194,34 @@ impl Animation {
                 .plants
                 .iter()
                 .filter_map(|(path, motion)| {
-                    let p = motion.pose.value(time);
-                    (p[3] > 0.001).then(|| Plant {
+                    let life = motion.life.value(time)[0];
+                    (life > 0.001).then(|| Plant {
                         path: path.clone(),
-                        x: p[0],
-                        y: p[1] + (1.0 - p[3]) * 4.0,
-                        radius: p[2],
-                        opacity: p[3],
+                        island: motion.island,
+                        x: motion.x,
+                        y: motion.y,
+                        radius: motion.radius,
+                        opacity: life,
                         bytes: motion.bytes,
                         born: motion.born,
+                    })
+                })
+                .collect(),
+            buildings: self
+                .buildings
+                .values()
+                .filter_map(|motion| {
+                    let life = motion.life.value(time)[0];
+                    let b = &motion.building;
+                    (life > 0.001).then(|| Building {
+                        directory: b.directory.clone(),
+                        island: motion.island,
+                        x: b.x,
+                        y: b.y,
+                        radius: motion.radius,
+                        opacity: life,
+                        sprite: b.sprite,
+                        file_count: b.file_count,
                     })
                 })
                 .collect(),
@@ -175,17 +249,86 @@ mod tests {
         let layout = Layout::new(&h, 6, 32, 700);
         let mut a = Animation::default();
         a.update(&h, &layout, 33.0, 0.0, 1.0);
-        let full = a.update(&h, &layout, 33.0, 1.0, 1.0);
+        let full = a.update(&h, &layout, 33.0, 2.0, 1.0);
         assert!(full.plants.iter().any(|p| p.path == "src/core/terrain.rs"));
-        a.update(&h, &layout, 35.0, 1.01, 1.0);
-        let fading = a.update(&h, &layout, 36.0, 1.3, 1.0);
+        a.update(&h, &layout, 35.0, 2.01, 1.0);
+        let fading = a.update(&h, &layout, 36.0, 2.3, 1.0);
         let ghost = fading
             .plants
             .iter()
             .find(|p| p.path == "src/core/terrain.rs")
             .unwrap();
         assert!(ghost.opacity > 0.5 && ghost.opacity < 1.0);
-        let gone = a.update(&h, &layout, 36.0, 2.2, 1.0);
+        let gone = a.update(&h, &layout, 36.0, 3.2, 1.0);
         assert!(!gone.plants.iter().any(|p| p.path == "src/core/terrain.rs"));
+    }
+    #[test]
+    fn a_folder_fades_in_place_and_new_plants_wait_for_their_own_land() {
+        let mut history = crate::cli::demo();
+        let template = history.snapshots[0].files.values().next().unwrap().clone();
+        history.snapshots.truncate(3);
+        history.total_commits = 3;
+        for (snapshot, paths) in history.snapshots.iter_mut().zip([
+            vec!["README.md", "module/a.rs"],
+            vec!["README.md", "module/a.rs", "module/b.rs", "module/c.rs"],
+            vec!["README.md", "module/a.rs"],
+        ]) {
+            snapshot.files = paths
+                .into_iter()
+                .map(|path| (path.into(), template.clone()))
+                .collect();
+        }
+        let layout = Layout::with_threshold(&history, 6, 32, 100, Some(2));
+        let child = layout
+            .islands
+            .iter()
+            .position(|i| i.directory == "module")
+            .unwrap();
+        let mut animation = Animation::default();
+        animation.update(&history, &layout, 0.0, 0.0, 1.0);
+        let initial = animation.update(&history, &layout, 0.0, 2.0, 1.0);
+        assert!(!initial.plants.iter().any(|p| p.path == "module/a.rs"));
+        let building = initial
+            .buildings
+            .iter()
+            .find(|b| b.directory == "module")
+            .unwrap();
+        let old_anchor = (building.x, building.y);
+        animation.update(&history, &layout, 1.0, 2.1, 1.0);
+        let emerging = animation.update(&history, &layout, 1.0, 2.5, 1.0);
+        assert!(!emerging.plants.iter().any(|p| p.path == "module/a.rs"));
+        let fading = emerging
+            .buildings
+            .iter()
+            .find(|b| b.directory == "module")
+            .unwrap();
+        assert_eq!((fading.x, fading.y), old_anchor);
+        assert!(fading.opacity > 0.0 && fading.opacity < 1.0);
+        let growing = animation.update(&history, &layout, 1.0, 3.3, 1.0);
+        let sprout = growing
+            .plants
+            .iter()
+            .find(|p| p.path == "module/a.rs")
+            .unwrap();
+        assert_eq!(sprout.island, child);
+        assert!(sprout.opacity > 0.0 && sprout.opacity < 1.0);
+        let anchor = (sprout.x, sprout.y);
+        let settled = animation.update(&history, &layout, 1.0, 4.2, 1.0);
+        let plant = settled
+            .plants
+            .iter()
+            .find(|p| p.path == "module/a.rs")
+            .unwrap();
+        assert_eq!((plant.x, plant.y), anchor);
+        assert_eq!(plant.opacity, 1.0);
+        assert!(!settled.buildings.iter().any(|b| b.directory == "module"));
+        let shrunk = animation.update(&history, &layout, 2.0, 4.3, 1.0);
+        let plant = shrunk
+            .plants
+            .iter()
+            .find(|p| p.path == "module/a.rs")
+            .unwrap();
+        assert_eq!((plant.x, plant.y), anchor);
+        assert_eq!(plant.island, child);
     }
 }
