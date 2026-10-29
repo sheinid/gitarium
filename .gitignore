@@ -1,0 +1,9 @@
+/target/
+/.tools/
+/work/
+/examples/*.mp4
+/examples/*.png
+*.partial
+/*.mp4
+/*.png
+.DS_Store

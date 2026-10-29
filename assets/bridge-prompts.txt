@@ -1,0 +1,14 @@
+Use case: stylized-concept
+Asset type: game sprite atlas of small footbridges for a quiet pixel-art pond garden.
+Create exactly SIXTEEN distinct bridge sprites in a precise 4-column, 4-row equal-cell square grid with a genuinely transparent background. Every bridge is viewed from directly overhead, runs horizontally left-to-right, has an aspect ratio around 4:1, and is centered in its cell with large transparent margins. The complete bridge fits inside each cell. No banks, islands, water, scenery, text, labels, border or grid.
+Style: simple low-resolution hand-pixeled game assets, meant to occupy roughly 48 by 12 native pixels each. Hard square pixel clusters, no smooth gradients or texture noise. Muted warm tan, weathered brown, cream, olive gray. Only 2 or 3 shades per material, restrained dark brown edges. Match a minimal daylight pond scene with small muted plants. Modest practical bridges, no fantasy or dramatic architectural details.
+Row 1: pale wood planks with no rails; darker wood planks with no rails; uneven old planks; two long timber beams with short cross planks.
+Row 2: simple bridge with low timber rails; bridge with four short square corner posts; simple rope-rail bridge; bamboo slat bridge.
+Row 3: narrow weathered boardwalk; bridge made from two split logs; bridge made from three round logs; short bridge with diagonal timber bracing.
+Row 4: bridge made from three flat stone slabs; narrow gray flagstone footbridge; rough timber footbridge with repaired boards; light wooden footbridge with a very simple center plank pattern.
+All sixteen horizontal and in the same overhead projection. Keep their deck silhouettes clean and legible at tiny sizes. Do not connect the sprites to each other. Preserve generous empty alpha between cells.
+
+Transparency correction
+
+Use case: background-extraction
+Edit the provided bridge sprite sheet. Keep every bridge, its placement, its 4 by 4 grid, its pixel-art appearance, and the image dimensions exactly as they are. Remove the ENTIRE brown, gray, blurry backdrop and all ground shadows or glow surrounding the bridges. The background and the spaces between deck planks must be genuinely transparent alpha, not filled with a color or checkerboard. The only opaque pixels in the result should belong to the sixteen bridges themselves, including their rails, posts and ropes. No new content. This is a production sprite atlas that will be composited on pale pond water. Return a PNG with a real transparent background.

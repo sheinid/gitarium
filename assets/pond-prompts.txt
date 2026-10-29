@@ -1,0 +1,42 @@
+pond-plants-a
+
+Use case: stylized-concept
+Asset type: transparent 4 by 4 game sprite sheet, exactly 16 sprites.
+Art direction: deliberately simple hand-pixeled assets for a quiet daylight pond game. Each object is designed on a small 24 by 32 pixel grid, then enlarged with nearest neighbor. Broad clusters of square pixels. Flat shapes, only two or three shades per material, no smooth gradients, no miniature illustration texture. Muted olive and moss greens, warm cream, clay, ochre and dusty pink/blue. A thin subdued olive contour only where needed. Slightly crooked stems and irregular silhouettes. Small humble everyday plants. Three-quarter top-down game view, very shallow perspective, no dramatic lighting.
+Composition: square transparent sheet with exactly FOUR columns and FOUR rows of equal sized cells. Each object centered in its cell with at least 20% empty transparent margin on every side. Objects must never touch a cell boundary or one another. All ground baselines aligned at 80% of their cell height. Real alpha transparency, no colored backdrop, no grid, no labels, no lettering.
+Avoid: glossy highlights, rim lights, glowing crystals, sparkles, fantasy effects, lush over-rendered bouquets, black outlines, photorealism, antialiasing, checkerboard backgrounds. Keep the actual art LOW resolution and modest rather than highly detailed.
+Subjects, in exact row-major order:
+Row 1: small woodland fern with a few copper tips; blue cornflower on a bent stem; small ochre sunflower; sparse purple lavender.
+Row 2: squat jade succulent; small irregular Scots pine; two simple white daisies; tiny pale-trunk birch sapling.
+Row 3: two smooth gray river stones with a little moss; three small brown mushrooms; oat grass with pale seed heads; low broad-leaf herb.
+Row 4: modest pink wild rose; one white water lily and two green pads; one low moss-covered stone; small clover patch.
+
+---
+
+pond-plants-b
+
+Use case: stylized-concept
+Asset type: transparent 4 by 4 game sprite sheet, exactly 16 sprites.
+Art direction: deliberately simple hand-pixeled assets for a quiet daylight pond game. Each object is designed on a small 24 by 32 pixel grid, then enlarged with nearest neighbor. Broad clusters of square pixels. Flat shapes, only two or three shades per material, no smooth gradients, no miniature illustration texture. Muted olive and moss greens, warm cream, clay, ochre and dusty pink/blue. A thin subdued olive contour only where needed. Slightly crooked stems and irregular silhouettes. Small humble everyday plants. Three-quarter top-down game view, very shallow perspective, no dramatic lighting.
+Composition: square transparent sheet with exactly FOUR columns and FOUR rows of equal sized cells. Each object centered in its cell with at least 20% empty transparent margin on every side. Objects must never touch a cell boundary or one another. All ground baselines aligned at 80% of their cell height. Real alpha transparency, no colored backdrop, no grid, no labels, no lettering.
+Avoid: glossy highlights, rim lights, glowing crystals, sparkles, fantasy effects, lush over-rendered bouquets, black outlines, photorealism, antialiasing, checkerboard backgrounds. Keep the actual art LOW resolution and modest rather than highly detailed.
+Subjects, in exact row-major order:
+Row 1: two slim bamboo canes; small prickly pear cactus; three dusty red tulips; short apple sapling with two red fruits.
+Row 2: two red poppies; one purple iris; low heather shrub; tiny purple violets.
+Row 3: cattails with two brown heads; loose green rushes; small maidenhair fern; low sedum with dusty pink flowers.
+Row 4: sparse pale pampas grass; little blueberry bush; small chamomile flowers; low nasturtium with orange flowers.
+
+---
+
+pond-shore
+
+Use case: stylized-concept
+Asset type: transparent 4 by 4 game sprite sheet, exactly 16 sprites.
+Art direction: deliberately simple hand-pixeled assets for a quiet daylight pond game. Each object is designed on a small 24 by 32 pixel grid, then enlarged with nearest neighbor. Broad clusters of square pixels. Flat shapes, only two or three shades per material, no smooth gradients, no miniature illustration texture. Muted olive and moss greens, warm cream, clay, ochre and dusty pink/blue. A thin subdued olive contour only where needed. Slightly crooked stems and irregular silhouettes. Small humble everyday plants. Three-quarter top-down game view, very shallow perspective, no dramatic lighting.
+Composition: square transparent sheet with exactly FOUR columns and FOUR rows of equal sized cells. Each object centered in its cell with at least 20% empty transparent margin on every side. Objects must never touch a cell boundary or one another. All ground baselines aligned at 80% of their cell height. Real alpha transparency, no colored backdrop, no grid, no labels, no lettering.
+Avoid: glossy highlights, rim lights, glowing crystals, sparkles, fantasy effects, lush over-rendered bouquets, black outlines, photorealism, antialiasing, checkerboard backgrounds. Keep the actual art LOW resolution and modest rather than highly detailed.
+Subjects, in exact row-major order:
+Row 1: two rounded gray stones; short green reeds; three plain floating lily pads; two little floating white pond flowers.
+Row 2: crooked piece of driftwood; three flat stepping stones; small tuft of grass; a small cream colored duck with brown head.
+Row 3: two small yellow ducklings; short partly submerged log; tiny weathered wooden landing made of four boards, no railings; sparse cattails.
+Row 4: five little gray pebbles; simple arrowhead aquatic leaves; tiny brown snail; one partly submerged flat stone.

@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+GITARIUM_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -x "$GITARIUM_ROOT/target/release/gitarium" ]; then
+    exec "$GITARIUM_ROOT/target/release/gitarium" "$@"
+fi
+if [ -x "$GITARIUM_ROOT/.tools/cargo/bin/cargo" ]; then
+    export CARGO_HOME="$GITARIUM_ROOT/.tools/cargo"
+    export RUSTUP_HOME="$GITARIUM_ROOT/.tools/rustup"
+    exec "$CARGO_HOME/bin/cargo" run --release --manifest-path "$GITARIUM_ROOT/Cargo.toml" -- "$@"
+fi
+exec cargo run --release --manifest-path "$GITARIUM_ROOT/Cargo.toml" -- "$@"
