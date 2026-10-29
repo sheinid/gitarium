@@ -31,7 +31,7 @@ pub struct Cli {
 }
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Render committed history to an H.264 MP4. Writes the requested output file.
+    /// Render committed history to MP4 or an animated GIF. Writes the requested output file.
     Export(Export),
     /// Render a committed repository state to PNG. Writes the requested output file.
     Snapshot(Snapshot),
@@ -41,6 +41,13 @@ pub enum Commands {
     Demo(Demo),
     /// List botanical species and their file associations.
     Species,
+    /// Print a paste-only Markdown embed for a public GitHub repository.
+    Embed {
+        /// OWNER/REPOSITORY or its GitHub URL.
+        repository: String,
+        #[arg(long, default_value=crate::embed::DEFAULT_BASE_URL)]
+        base_url: String,
+    },
     /// Check Git and the H.264 video encoder.
     Doctor {
         #[arg(long)]
@@ -72,6 +79,9 @@ pub struct Source {
     /// Include tracked node_modules, target, dist, build, and other generated directories.
     #[arg(long)]
     pub include_generated: bool,
+    /// Stop if an observed snapshot exceeds this filtered file count.
+    #[arg(long, value_parser=clap::value_parser!(u32).range(1..=1000000))]
+    pub max_files: Option<u32>,
 }
 #[derive(Args, Debug)]
 pub struct View {
@@ -210,6 +220,7 @@ impl Source {
                 max_commits: self.max_commits as usize,
                 exclude: self.exclude.clone(),
                 include_generated: self.include_generated,
+                max_files: self.max_files.map(|n| n as usize),
             },
         )
     }
@@ -259,7 +270,15 @@ fn output_extension(output: &Output, ext: &str) -> Result<()> {
 }
 
 fn movie(history: &History, view: &View, movie: &Movie, output: &Output) -> Result<Value> {
-    output_extension(output, "mp4")?;
+    let extension = output
+        .output
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    if !extension.eq_ignore_ascii_case("mp4") && !extension.eq_ignore_ascii_case("gif") {
+        bail!("Output must have a .mp4 or .gif extension");
+    }
+    output_extension(output, extension)?;
     let options = movie.options(view)?;
     if output.dry_run {
         return Ok(
@@ -308,6 +327,10 @@ pub fn execute(cli: &Cli) -> Result<Value> {
             )
         }
         Commands::Inspect(source) => Ok(source.read()?.summary()),
+        Commands::Embed {
+            repository,
+            base_url,
+        } => crate::embed::Repository::parse(repository)?.markdown(base_url),
         Commands::Demo(args) => {
             let history = demo();
             if args
@@ -578,6 +601,8 @@ pub fn emit(result: Result<Value>, format: Format) -> i32 {
                     "{}",
                     json!({"ok":true,"data":data,"meta":{"schema_version":"1.0.0","version":env!("CARGO_PKG_VERSION")}})
                 );
+            } else if let Some(markdown) = data.get("markdown").and_then(Value::as_str) {
+                println!("{markdown}");
             } else if let Some(path) = data.get("output").and_then(Value::as_str) {
                 println!("Grown and saved to {path}");
             } else {

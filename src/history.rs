@@ -43,6 +43,7 @@ pub struct ReadOptions {
     pub max_commits: usize,
     pub exclude: Vec<String>,
     pub include_generated: bool,
+    pub max_files: Option<usize>,
 }
 impl Default for ReadOptions {
     fn default() -> Self {
@@ -53,6 +54,7 @@ impl Default for ReadOptions {
             max_commits: 240,
             exclude: vec![],
             include_generated: false,
+            max_files: None,
         }
     }
 }
@@ -219,6 +221,9 @@ pub fn read(root: &Path, options: &ReadOptions) -> Result<History> {
                 },
             };
             files.insert(path, state);
+            if options.max_files.is_some_and(|limit| files.len() > limit) {
+                bail!("Repository exceeds the configured file limit");
+            }
         }
         snapshots.push(Snapshot { commit, files });
     }

@@ -470,3 +470,62 @@ fn island_limit_keeps_a_connected_tree_and_the_file_budget() {
         7
     );
 }
+
+#[test]
+fn history_file_limit_stops_oversized_snapshots() {
+    let dir = repo();
+    write(dir.path(), "a.rs", "one");
+    write(dir.path(), "b.rs", "two");
+    commit(dir.path(), "grow");
+    let error = history::read(
+        dir.path(),
+        &ReadOptions {
+            max_files: Some(1),
+            ..ReadOptions::default()
+        },
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("file limit"));
+}
+
+#[test]
+fn gif_roundtrip_when_available() {
+    let Ok(encoder) = std::env::var("GITARIUM_TEST_FFMPEG") else {
+        return;
+    };
+    let history = cli::demo();
+    let mut renderer = Renderer::new(Layout::new(&history, 6, 24, 150)).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("garden.gif");
+    let frames = video::export(
+        &history,
+        &mut renderer,
+        &VideoOptions {
+            width: 640,
+            height: 360,
+            fps: 12,
+            duration: 3.0,
+            hold: 0.5,
+            calendar: false,
+            transition: 1.2,
+        },
+        &path,
+        Path::new(&encoder),
+        false,
+    )
+    .unwrap();
+    assert_eq!(frames, 36);
+    let bytes = fs::read(&path).unwrap();
+    assert!(bytes.starts_with(b"GIF89a") || bytes.starts_with(b"GIF87a"));
+    let output = Command::new(encoder)
+        .args(["-v", "error", "-i"])
+        .arg(path)
+        .args(["-f", "null", "-"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

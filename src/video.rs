@@ -150,9 +150,12 @@ pub fn export(
 ) -> Result<usize> {
     options.validate()?;
     let parent = output_parent(path, force)?;
+    let gif = path
+        .extension()
+        .is_some_and(|s| s.eq_ignore_ascii_case("gif"));
     let temp = tempfile::Builder::new()
         .prefix(".gitarium-")
-        .suffix(".mp4")
+        .suffix(if gif { ".gif" } else { ".mp4" })
         .tempfile_in(&parent)?;
     let log = tempfile::tempfile()?;
     let mut command = Command::new(encoder);
@@ -171,12 +174,17 @@ pub fn export(
         .arg(format!("{}x{}", options.width, options.height))
         .arg("-framerate")
         .arg(options.fps.to_string())
-        .args([
-            "-i",
-            "pipe:0",
-            "-an",
+        .args(["-i", "pipe:0", "-an"]);
+    if gif {
+        command.args(["-filter_complex_threads","1","-filter_complex",
+            "split[a][b];[a]palettegen=max_colors=128:stats_mode=single[p];[b][p]paletteuse=new=1:dither=none",
+            "-loop","0","-f","gif"]);
+    } else {
+        command.args([
             "-c:v",
             "libx264",
+            "-threads",
+            "2",
             "-preset",
             "medium",
             "-crf",
@@ -187,7 +195,9 @@ pub fn export(
             "+faststart",
             "-f",
             "mp4",
-        ])
+        ]);
+    }
+    command
         .arg(temp.path())
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
