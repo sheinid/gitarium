@@ -1,127 +1,146 @@
 # Gitarium
 
-A Rust CLI that grows a pixel-art island garden from a Git repository. Directories become low grassy islands in a pale pond. Files become plants, flowers, stones, and mushrooms. Export a still image or an H.264 MP4 of the repository growing through its commit history.
+Grow a Git repository into a pixel-art pond. Directories become islands, files become plants, and bridges show the directory tree.
 
-![A repository grown into a pond garden](assets/preview.png)
+## Embed in your README
 
-## Install and run
+Paste this into any README and replace `OWNER/REPOSITORY`:
 
-Install [Rust](https://rust-lang.org/tools/install/) 1.85 or newer, Git, and FFmpeg with the `libx264` encoder.
+```md
+![Repository growing with Gitarium](https://gitarium-f0f902-185-16-61-74.sslip.io/embed/OWNER/REPOSITORY.gif)
+```
+
+The hosted service generates an animated GIF from the repository's history. No installation, workflow, or token is needed in the repository you embed. Public GitHub repositories only.
+
+The first view starts a render. It may briefly show a preparing image; refresh after the render finishes. Cached GIFs refresh after six hours when viewed, and the previous image stays available during refresh.
+
+Gitarium's own history:
+
+![Gitarium growing from its own commits](https://gitarium-f0f902-185-16-61-74.sslip.io/embed/sheinid/gitarium.gif)
+
+You can also print the Markdown with the CLI:
 
 ```sh
-git clone https://github.com/sheinid/gitarium.git
-cd gitarium
-cargo install --path . --locked
+gitarium embed OWNER/REPOSITORY --format human
+```
+
+Use `--base-url https://your-host.example` with a self-hosted service. [Hosting, HTTP endpoints, and public-service limits](docs/hosting.md).
+
+## Run locally
+
+Install [Rust](https://rust-lang.org/tools/install/) 1.85 or newer, Git, and FFmpeg with libx264.
+
+```sh
+cargo install --git https://github.com/sheinid/gitarium.git --locked
 
 gitarium doctor
 gitarium demo -o garden.mp4
 gitarium snapshot /path/to/repository -o garden.png
 gitarium export /path/to/repository -o growth.mp4 --duration 30
+gitarium export /path/to/repository -o growth.gif --fps 15
 ```
 
-`demo` also accepts a `.png` output. To run directly from the checkout, use `./gitarium` instead of the installed command. The launcher uses a release build when available and compiles one with Cargo otherwise.
+PNG snapshots need no FFmpeg. Sprites are embedded in the executable. The `./gitarium` launcher also works from a source checkout and builds the release binary if needed.
 
-PNG rendering needs no FFmpeg. The sprite atlas is embedded in the executable. Video export checks an explicit `--ffmpeg` path, then `GITARIUM_FFMPEG`, then an encoder next to the binary, the development `.tools/ffmpeg`, and finally `ffmpeg` on PATH.
+## Smoother growth and deletion
 
-## Commands
+Transitions use playback time independently of commit spacing. Islands rise from the pond, bridges build outward from their parents, and plants sprout into place. Deleted plants remain visible while they shrink and fade. Retired bridges retract and their islands sink away.
 
-| Command | Result |
-| --- | --- |
-| `export REPOSITORY -o growth.mp4` | Animate the selected committed history |
-| `snapshot REPOSITORY -o garden.png` | Render the latest selected state |
-| `inspect REPOSITORY` | Show history statistics and species counts |
-| `demo -o garden.mp4` | Render the bundled 48-observation example |
-| `species` | List all 32 file species, 16 shoreline assets, and 16 bridge variants |
-| `doctor` | Check Git and H.264 encoder availability |
-| `schema export` | Inspect typed arguments derived from the CLI definitions |
-
-Run any command with `--help` for its flags. Standard output defaults to JSON when piped, and readable text in a terminal. Override with `--format json` or `--format human`. Render progress goes to standard error as JSON events. Success and failure envelopes carry `meta.schema_version`. Exit codes are 0 for success, 1 for runtime errors, and 2 for invalid CLI arguments. Commands never prompt.
-
-## Shape the garden
+The default transition lasts 1.2 seconds. Change it with `--transition`:
 
 ```sh
-# Follow a branch, limit the period, and pace by elapsed calendar time.
-gitarium export . --revision main --since 2025-01-01 --until 2025-12-31 \
-  --calendar --duration 45 --hold 3 -o year.mp4
-
-# Larger video, deeper child islands, and more islands.
-gitarium export . --width 1920 --height 1080 --depth 3 \
-  --max-islands 32 --island-threshold 24 --max-plants 1000 --fps 30 -o garden.mp4
-
-# Exclude generated files with repository-relative globs.
-gitarium snapshot . --exclude '**/*.min.js' --exclude 'assets/**' -o garden.png
-
-# Inspect a state halfway through the sampled history.
-gitarium snapshot . --progress 0.5 -o halfway.png
-
-# Describe a render without creating any files or starting the encoder.
-gitarium export . -o garden.mp4 --dry-run
+gitarium export . -o growth.mp4 --duration 45 --transition 1.8 --hold 3
 ```
 
-Use `--force` to replace an existing output. Output is rendered into a temporary file in the destination directory and published only after success. The source repository is never checked out or modified. A 16:9 aspect ratio fits the composition best. Width and height must be even for MP4.
+`--hold` pauses on the final settled scene and is included in `--duration`. The exporter reserves time for the final transitions before that pause. Very short clips shorten the transition to fit.
 
-`--duration` includes the final `--hold`, which defaults to 2 seconds. For shorter videos, reduce `--hold`. Default output is 1280 by 720 at 24 fps for 20 seconds.
+## Shape the pond
 
-## Plants and shoreline assets
+```sh
+# Follow a branch and select an inclusive UTC date range.
+gitarium export . --revision main --since 2026-01-01 --until 2026-12-31 \
+  --calendar --duration 45 -o year.mp4
 
-There are 32 file species, 16 shoreline assets, and 16 bridge variants. `gitarium species` prints the full catalog and file associations.
+# Full HD, a fixed island threshold, and deeper directories.
+gitarium export . --width 1920 --height 1080 --fps 30 --depth 6 \
+  --max-islands 32 --island-threshold 24 -o pond.mp4
+
+# Exclude files with repository-relative globs.
+gitarium snapshot . --exclude '**/*.min.js' --exclude 'assets/**' -o garden.png
+
+# Inspect the planned render without writing any output.
+gitarium export . -o growth.mp4 --dry-run
+```
+
+Use `--force` to replace an output. Gitarium writes a temporary file and publishes it only after successful rendering. It never checks out or modifies the source repository. MP4 and GIF output use even dimensions, with 16:9 recommended for the composition.
+
+## Nested islands and bridges
+
+A directory qualifies for an island when its filtered subtree contains **more than N files** at an observed commit. Its files then move from the nearest active ancestor to the new island. If the count falls to N or less, they return to that ancestor. Each file has one owner.
+
+N is automatic by default. Gitarium takes the latest snapshot's average files per nonempty directory, multiplies it by six, and rounds up to a multiple of four, bounded to 12..64. Small repositories scale down to at most one twelfth of the file count, with a minimum of four. This is a display heuristic, not a global repository statistic. For example, an average of four files per directory gives **N = 24** for a sufficiently large repository.
+
+Set `--island-threshold N` to choose your own boundary. `--dry-run` reports the threshold, directory average, island depths, parents, radii, and file counts.
+
+Each file-tree level reduces island radius by 20%. Every child has a bridge to its nearest displayed parent. There are 16 bridge variants, including planks, rails, rope, bamboo, logs, and stone slabs. Routes avoid unrelated islands and their banks.
+
+The default layout allows 32 islands through depth six. Larger subtrees take priority when more directories qualify, and selected islands retain their ancestors. Unselected directories stay with their nearest displayed ancestor. Smaller islands hold fewer visible plants. Counts still include all filtered files.
+
+## Plants and assets
+
+There are 32 file species, 16 shoreline assets, and 16 bridge variants. Run `gitarium species` for the full catalog.
 
 | Files | Plants |
 | --- | --- |
 | Rust / TypeScript / JavaScript / Python | Fern / cornflower / sunflower / lavender |
 | Go / C and C++ / Java and Kotlin / Swift | Bamboo / prickly pear / tulips / apple sapling |
 | Ruby / PHP / Haskell / Lua / Elixir | Poppies / iris / heather / violets / wild rose |
-| CSS / Sass and Less | Succulent / chamomile |
 | Tests / documentation | Daisies / birch saplings |
 | TOML / JSON / YAML / other config | Sedum / maidenhair fern / rushes / river stones |
 | Lockfiles / build recipes / shell | Mushrooms / oat grass / cattails |
 | SQL / GraphQL / tabular data / R and Julia | Mossy stone / blueberries / pampas grass / nasturtium |
 | Templates / media / other files | Broadleaf herbs / water lilies / clover |
 
-Lockfiles take priority over config detection. Test detection takes priority over language detection. Plant size depends on blob size and age in observed snapshots. New files sprout and deleted files shrink away. Path hashes keep positions, orientation, and shoreline details stable during playback.
+Lockfiles take priority over config detection. Tests take priority over language detection. Blob size and age affect plant size. Stable path hashes determine positions and orientation.
 
-The renderer uses a shared 22-color sprite palette and small native pixel grids. The pond has sand banks, a few reeds, stones, logs, lily pads, and ducks. The repository name sits at the top. Directory labels and a small footer with the date and file count provide the remaining context. There are no dashboard panels, legends, badges, glow effects, floating undersides, or hanging roots.
+## Commands
 
-## History and scale
+| Command | Result |
+| --- | --- |
+| `export REPOSITORY -o garden.mp4` | Animate committed history as MP4 or GIF |
+| `snapshot REPOSITORY -o garden.png` | Render a still image; `--progress 0..1` selects a point in history |
+| `embed OWNER/REPOSITORY` | Print a hosted image URL and Markdown |
+| `inspect REPOSITORY` | Show history statistics and species counts |
+| `demo -o garden.mp4` | Render the bundled example; PNG and GIF work too |
+| `species` | List plants, shoreline assets, and bridge variants |
+| `doctor` | Check Git and video encoder availability |
+| `schema export` | Inspect typed arguments derived from CLI definitions |
 
-Gitarium reads first-parent history from the selected revision. Merge commits use the complete merged tree, including files introduced on the merged branch. It reads blob IDs, paths, and sizes, without opening source file contents. Dirty working-tree files and untracked files do not appear. Bare repositories work too.
+Use `--help` on a command for all options. Piped output defaults to JSON; terminals get readable text. Override with `--format json` or `--format human`. Progress goes to stderr. Exit codes are 0 for success, 1 for runtime errors, and 2 for invalid arguments.
 
-The default maximum is 240 evenly sampled snapshots, including both endpoints. Increase `--max-commits`, up to 2000, to observe more commits. A limit of one shows the final state. Date ranges are inclusive UTC commit dates. Calendar mode uses a monotone timestamp envelope to handle clocks that move backwards. Normal playback allocates equal time to each sampled observation.
+## History limits
 
-Sampling can skip short-lived files and intermediate edits. Renames appear as removal and planting at the new path. Species rules currently live in `src/species.rs`. Submodule contents belong to another repository and are skipped. Git paths must be valid UTF-8; labels replace unsupported glyphs with `?`. Shallow repositories show only available history and carry a visible warning.
+Gitarium reads first-parent history. Merge commits include the complete merged tree. Dirty and untracked files do not appear. Bare repositories work.
 
-Tracked `node_modules`, `target`, `vendor`, `dist`, `build`, `.next`, `__pycache__`, and `.venv` directories are hidden by default. Use `--include-generated` to include them.
+By default it samples 240 evenly spaced observations, including both endpoints. `--max-commits` accepts up to 2000 observations. Sampling can miss short-lived files or directories. Layout planning uses maximum simultaneous subtree counts, so historical path churn does not inflate island eligibility.
 
-## Nested islands and bridges
+Renames appear as a removal and a new planting. Submodule contents are skipped. Git paths must be UTF-8. Labels replace unsupported glyphs with `?`. Shallow clones show available history and carry a partial-history label. Calendar mode handles backwards commit clocks with a monotone timestamp envelope.
 
-The root island is always present. A directory earns a child island when its filtered subtree contains **more than N files** at an observed commit. This includes its descendants. When it crosses that boundary, its files move from the nearest active ancestor to the new island. If the count falls back to N or less, they return to the ancestor. Files belong to exactly one island at a time.
+Tracked `node_modules`, `target`, `vendor`, `dist`, `build`, `.next`, `__pycache__`, and `.venv` directories are hidden unless `--include-generated` is set. `--max-files` optionally limits filtered files per observed snapshot.
 
-By default N adapts to the selected repository. Take the latest snapshot's average files per nonempty directory, multiply by six, and round up to a multiple of four, bounded to 12..64. For small repositories, lower this to at most one twelfth of the total file count, with a minimum of four. This is a display heuristic based on the current repository, not a claim about a global average. An empty latest state uses the observed path union to estimate N.
-
-For example, 720 files across 180 nonempty directories average four files per directory. The resulting threshold is **N = 24**. Use `--island-threshold 24` to set N explicitly. `--dry-run` returns the chosen threshold, directory average, island depths, parents, radii, and owned-file counts in the `layout` result.
-
-Island radius is proportional to `0.8 ^ directory_depth`. Deeper islands are always smaller than their ancestors. Parent links follow the real directory tree. Every child has one bridge to its nearest displayed parent. Bridge routes avoid unrelated islands and their banks. The 16 bridge sprites include plain planks, rails, rope, bamboo, logs, repaired boards, and flat stone slabs. Bridges appear and disappear with their child island.
-
-The layout plans eligible islands from the maximum simultaneous subtree count across the selected observations. Renamed or deleted historical paths do not inflate this count. Planning the tree once keeps the camera and island positions fixed throughout the timelapse. The default maximum depth is six, with at most 32 islands. If more directories qualify, larger subtrees take priority, and the selected tree retains its ancestors. Other files stay on their nearest displayed ancestor.
-
-The plant budget is shared across active islands. Each island's capacity depends on its area, so deeper islands have fewer visible plants. CLI counts still include every filtered file. Images remain free of density counters.
-
-## Development
+## Develop and self-host
 
 ```sh
-cargo test --locked
+cargo test --release --features server --locked
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-GITARIUM_TEST_FFMPEG=/path/to/ffmpeg cargo test --release --locked
-cargo build --release --locked
+cargo clippy --all-targets --features server -- -D warnings
+GITARIUM_TEST_FFMPEG=/path/to/ffmpeg cargo test --release --features server --locked
 ```
 
-The tests create isolated repositories and cover merges, edits, deletions, renames, unusual file names, filtering, stable rendering, strict island thresholds, directory ancestry, depth-based size, ownership on promotion and retirement, historical path churn, plant budgets, dry runs, schema, and input validation. Setting `GITARIUM_TEST_FFMPEG` enables the MP4 encode/decode roundtrip test.
+The `server` feature is optional. It builds `gitarium-server` alongside the CLI. The included Dockerfile and Compose file provide a non-root service with persistent GIF caching. See [hosting](docs/hosting.md) for setup and limits.
 
-The renderer uses native Rust image buffers and embedded bitmap text. It streams RGBA frames directly to FFmpeg and does not write a directory of frame images.
+Tests cover Git trees and merges, threshold boundaries, parent links, file ownership, bridge routing, stable rendering, real-time transitions, retained deletions, GIF and MP4 encoding, cache responses, and input validation.
 
-## Sprite assets
+## License and artwork
 
-The plant and shoreline sheets are `assets/pond-plants-a.png`, `assets/pond-plants-b.png`, and `assets/pond-shore.png`. They contain 32 plant sprites and 16 shoreline assets created with the built-in ImageGen tool. `assets/bridges.png` adds 16 bridge sprites. Bridge generation and transparency correction prompts are saved in `assets/bridge-prompts.txt`. The exact prompts are saved in `assets/pond-prompts.txt`. The renderer trims the sheets into sprites, uses hard alpha, fits them to small pixel grids, and maps their colors to a shared palette. This avoids smooth shading and keeps the sprite sheets consistent at game size. `assets/preview.png` is a scene rendered by Gitarium itself. No image-generation API key is needed to run the program.
-
-The Rust source is MIT licensed. FFmpeg is an external dependency and is not distributed in this repository. Its license depends on the build you install. Cargo dependency licenses remain with their respective authors.
+MIT. Sprite sheets were generated with ImageGen; the prompts are included in `assets/`. The renderer trims them to small pixel grids and a shared palette. FFmpeg is an external dependency with its own license.
