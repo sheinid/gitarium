@@ -150,7 +150,7 @@ def render_gif(slug, sha, output, binary):
     env = {k: v for k, v in os.environ.items() if k not in ('GH_TOKEN', 'GITHUB_TOKEN')}
     env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null', GIT_TERMINAL_PROMPT='0')
     with tempfile.TemporaryDirectory(prefix='gitarium-') as directory:
-        bare = Path(directory) / 'source.git'
+        bare = Path(directory) / slug.split('/')[1]
         subprocess.run(['git', '-c', 'credential.helper=', '-c', 'core.hooksPath=/dev/null',
                         '-c', 'protocol.file.allow=never', 'clone', '--bare', '--single-branch',
                         '--depth', '2000', '--', f'https://github.com/{slug}.git', str(bare)],

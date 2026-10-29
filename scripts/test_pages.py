@@ -58,6 +58,7 @@ class PagesTests(unittest.TestCase):
             clone, render = run.call_args_list
             self.assertIn('--bare', clone.args[0])
             self.assertEqual(clone.args[0][-2], 'https://github.com/owner/repo.git')
+            self.assertEqual(Path(clone.args[0][-1]).name, 'repo')
             self.assertEqual(render.args[0][0], '/trusted/gitarium')
             for call in run.call_args_list:
                 self.assertNotIn('GH_TOKEN', call.kwargs['env'])
