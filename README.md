@@ -127,7 +127,7 @@ Gitarium reads first-parent history. Merge commits include the complete merged t
 
 By default it samples 240 evenly spaced observations, including both endpoints. `--max-commits` accepts up to 2000 observations. Sampling can miss short-lived files or directories. Layout planning uses maximum simultaneous subtree counts, so historical path churn does not inflate island eligibility.
 
-Renames appear as a removal and a new planting. Submodule contents are skipped. Git paths must be UTF-8. Captions use a compact pixel font drawn at its native grid size. Maps show a few full directory names in clear water; dense maps label only primary islands. Labels never cover bridges or neighboring islands. Unsupported glyphs appear as `?`. Shallow clones show available history and mark the date with an asterisk. Calendar mode handles backwards commit clocks with a monotone timestamp envelope.
+Renames appear as a removal and a new planting. Submodule contents are skipped. Git paths must be UTF-8. Captions use a small pixel font drawn at the output resolution. Every visible island has a directory label. Names use the least crowded nearby position, and very long names shorten to fit. Unsupported glyphs appear as `?`. Shallow clones show available history and mark the date with an asterisk. Calendar mode handles backwards commit clocks with a monotone timestamp envelope.
 
 Tracked `node_modules`, `target`, `vendor`, `dist`, `build`, `.next`, `__pycache__`, and `.venv` directories are hidden unless `--include-generated` is set. `--max-files` optionally limits filtered files per observed snapshot.
 
