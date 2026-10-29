@@ -204,6 +204,25 @@ pub const SPECIES: [Species; 32] = [
     },
 ];
 
+pub const DIRECTORY_BUILDINGS: [&str; 16] = [
+    "Log cabin",
+    "Stone cottage",
+    "Barn",
+    "Greenhouse",
+    "Fishing hut",
+    "Brick kiln",
+    "Thatched cottage",
+    "Workshop",
+    "Watchtower",
+    "Watermill",
+    "Windmill",
+    "Chapel",
+    "Tea house",
+    "Garden shed",
+    "Observatory",
+    "Lighthouse",
+];
+
 pub const SHORE_ASSETS: [&str; 16] = [
     "Rounded stones",
     "Reeds",

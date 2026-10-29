@@ -2,7 +2,7 @@ use crate::{
     history::{self, History, ReadOptions},
     layout::Layout,
     render::Renderer,
-    species::{SHORE_ASSETS, SPECIES},
+    species::{DIRECTORY_BUILDINGS, SHORE_ASSETS, SPECIES},
     video::{self, VideoOptions},
 };
 use anyhow::{Result, bail};
@@ -362,7 +362,7 @@ pub fn execute(cli: &Cli) -> Result<Value> {
             }
         }
         Commands::Species => Ok(
-            json!({"species":SPECIES,"shore_assets":SHORE_ASSETS,"bridge_variants":16,"atlas":"32 plants, 16 shoreline assets, 16 bridges"}),
+            json!({"species":SPECIES,"shore_assets":SHORE_ASSETS,"bridge_variants":16,"directory_buildings":DIRECTORY_BUILDINGS,"atlas":"32 plants, 16 shoreline assets, 16 bridges, 16 buildings"}),
         ),
         Commands::Doctor { ffmpeg } => {
             let git = std::process::Command::new("git")

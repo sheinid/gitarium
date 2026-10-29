@@ -33,6 +33,7 @@ pub struct Assets {
     pub plants: Vec<RgbaImage>,
     pub shore: Vec<RgbaImage>,
     pub bridges: Vec<RgbaImage>,
+    pub buildings: Vec<RgbaImage>,
 }
 
 impl Assets {
@@ -54,7 +55,14 @@ impl Assets {
             &[12, 23, 12, 11, 10, 10, 13, 14, 9, 9, 14, 24, 7, 18, 8, 9],
         )?;
         let bridges = sheet(include_bytes!("../assets/bridges.png"), &[12; 16])?;
+        let buildings = sheet(
+            include_bytes!("../assets/buildings.png"),
+            &[
+                30, 30, 32, 28, 30, 32, 30, 30, 40, 34, 44, 38, 28, 26, 32, 40,
+            ],
+        )?;
         Ok(Self {
+            buildings,
             plants,
             shore,
             bridges,
@@ -129,11 +137,13 @@ mod tests {
         assert_eq!(assets.plants.len(), 32);
         assert_eq!(assets.shore.len(), 16);
         assert_eq!(assets.bridges.len(), 16);
+        assert_eq!(assets.buildings.len(), 16);
         for sprite in assets
             .plants
             .iter()
             .chain(&assets.shore)
             .chain(&assets.bridges)
+            .chain(&assets.buildings)
         {
             assert!(sprite.pixels().filter(|p| p[3] > 0).count() > 8);
             assert!(sprite.pixels().all(|p| p[3] == 0 || p[3] == 255));
