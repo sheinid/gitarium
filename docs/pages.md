@@ -20,7 +20,7 @@ A request with `render-failed` stays open and retries on later runs. Check the w
 
 The central queue holds up to 24 repositories. Requests enter in creation order after existing registrations. Each repository must be public and no larger than 100 MB according to GitHub's repository metadata. The renderer reads at most 2,000 commits from a shallow clone and samples up to 120 first-parent observations. Files are limited to 10,000 per filtered snapshot.
 
-GIFs are 960 × 540 at 15 fps for 16 seconds, with a 1.2-second transition and a two-second final hold. Layouts allow 24 islands and 450 visible plants. Clones time out after 90 seconds and rendering after three minutes. GIFs must be at most 10 MB. Use the local CLI for larger repositories, full history, MP4, or different settings.
+GIFs are 960 × 540 at 15 fps for 16 seconds, with 1.2-second growth phases and a two-second final hold. Land settles before plants grow, and the exporter reserves time for both phases. Layouts allow 24 islands and 450 visible plants. Clones time out after 90 seconds and rendering after three minutes. GIFs must be at most 10 MB. Use the local CLI for larger repositories, full history, MP4, or different settings.
 
 The workflow checks out only Gitarium's trusted `main` branch. Target repositories are bare clones. Their build scripts and workflows never run. GIFs are cached in Actions and recoverable from the live Pages deployment. Completed request issues and `registry.json` preserve registrations. The workflow updates request labels and closes successful requests after deployment.
 

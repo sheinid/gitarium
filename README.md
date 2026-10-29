@@ -1,6 +1,6 @@
 # Gitarium
 
-Grow a Git repository into a pixel-art pond. Directories become islands, files become plants, and bridges show the directory tree.
+Grow a Git repository into a pixel-art pond. Small directories become buildings, larger directories become islands, and files grow into plants where they belong.
 
 ## Embed in your README
 
@@ -45,15 +45,15 @@ PNG snapshots need no FFmpeg. Sprites are embedded in the executable. The `./git
 
 ## Smoother growth and deletion
 
-Transitions use playback time independently of commit spacing. Islands rise from the pond, bridges build outward from their parents, and plants sprout into place. Deleted plants remain visible while they shrink and fade. Retired bridges retract and their islands sink away.
+Transitions use playback time independently of commit spacing. A new island emerges first, its bridge builds outward, and its files sprout in place after the ground settles. Plants keep fixed ground positions throughout their lives. Deleted plants shrink and fade where they grew; retired bridges retract and empty islands sink away.
 
-The default transition lasts 1.2 seconds. Change it with `--transition`:
+Each growth phase lasts 1.2 seconds by default. Change it with `--transition`:
 
 ```sh
 gitarium export . -o growth.mp4 --duration 45 --transition 1.8 --hold 3
 ```
 
-`--hold` pauses on the final settled scene and is included in `--duration`. The exporter reserves time for the final transitions before that pause. Very short clips shorten the transition to fit.
+`--hold` pauses on the final settled scene and is included in `--duration`. The exporter reserves up to two transition phases for the final island and plant growth before that pause. Very short clips shorten the phases to fit.
 
 ## Shape the pond
 
@@ -77,7 +77,9 @@ Use `--force` to replace an output. Gitarium writes a temporary file and publish
 
 ## Nested islands and bridges
 
-A directory qualifies for an island when its filtered subtree contains **more than N files** at an observed commit. Its files then move from the nearest active ancestor to the new island. If the count falls to N or less, they return to that ancestor. Each file has one owner.
+A directory first qualifies for an island when its filtered subtree contains **more than N files** at an observed commit. Once established, the island remains while that directory has files, even if it shrinks below the threshold. Deleting the directory retires its island. Recreating a small directory starts with a building again.
+
+Before promotion, a folder is a small building on its nearest displayed ancestor. The building fades where it stands when its island appears. Its files then sprout on that island; plants never travel between islands. Only files directly inside a displayed island's directory become plants there. Subdirectories without islands stay folded into buildings.
 
 N is automatic by default. Gitarium takes the latest snapshot's average files per nonempty directory, multiplies it by six, and rounds up to a multiple of four, bounded to 12..64. Small repositories scale down to at most one twelfth of the file count, with a minimum of four. This is a display heuristic, not a global repository statistic. For example, an average of four files per directory gives **N = 24** for a sufficiently large repository.
 
@@ -85,11 +87,11 @@ Set `--island-threshold N` to choose your own boundary. `--dry-run` reports the 
 
 Each file-tree level reduces island radius by 20%. Every child has a bridge to its nearest displayed parent. There are 16 bridge variants, including planks, rails, rope, bamboo, logs, and stone slabs. Routes avoid unrelated islands and their banks.
 
-The default layout allows 32 islands through depth six. Larger subtrees take priority when more directories qualify, and selected islands retain their ancestors. Unselected directories stay with their nearest displayed ancestor. Smaller islands hold fewer visible plants. Counts still include all filtered files.
+The default layout allows 32 islands through depth six. Larger subtrees take priority when more directories qualify, and selected islands retain their ancestors. Unselected directories remain buildings on their nearest displayed ancestor. Each island shows up to eight buildings, with fewer on small islands. Building kinds and positions are stable for each directory path. Smaller islands also hold fewer visible plants. Counts still include all filtered files, including those represented by buildings; `--dry-run` reports folded files and omitted buildings separately.
 
-## Plants and assets
+## Plants and buildings
 
-There are 32 file species, 16 shoreline assets, and 16 bridge variants. Run `gitarium species` for the full catalog.
+There are 32 file species, 16 shoreline assets, 16 bridge variants, and 16 directory buildings. Buildings include cabins, cottages, barns, greenhouses, workshops, watermills, windmills, and observatories. Run `gitarium species` for the full catalog.
 
 | Files | Plants |
 | --- | --- |
@@ -139,7 +141,7 @@ GITARIUM_TEST_FFMPEG=/path/to/ffmpeg cargo test --release --locked
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-Tests cover Git trees and merges, threshold boundaries, parent links, file ownership, bridge routing, stable rendering, real-time transitions, retained deletions, GIF and MP4 encoding, Pages caching, and input validation.
+Tests cover Git trees and merges, threshold boundaries, parent links, file ownership, bridge routing, stable rendering, staged growth, stationary file anchors, directory buildings, retained deletions, GIF and MP4 encoding, Pages caching, and input validation.
 
 The GIF request queue and publishing workflow live in `.github/` and `scripts/pages.py`. [Run your own Pages instance](docs/pages.md#run-your-own-pages-instance) to host another gallery.
 
